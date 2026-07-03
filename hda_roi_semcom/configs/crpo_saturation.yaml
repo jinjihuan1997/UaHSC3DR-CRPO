@@ -1,0 +1,15 @@
+mapping_quality:
+  mapping_quality_mode: gsfusion_surrogate
+  n_depth_blocks: 16
+  gsfusion_weights:
+    model: saturation
+    bias: -0.00733372
+    w_rgb: 0.00000000
+    w_depth: 0.07545491
+    w_joint: 0.88949502
+    lambda_rgb: 3.00000000
+    lambda_depth: 8.00000000
+    feature_names:
+      - g_rgb
+      - g_depth
+      - g_rgb_times_g_depth

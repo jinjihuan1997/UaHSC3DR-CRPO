@@ -1,0 +1,74 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Environments
+.venv/
+venv/
+env/
+.conda/
+
+# IDE / agent metadata
+.idea/
+.vscode/
+.agents/
+.claude/
+.codex/
+
+# Build outputs
+**/build/
+**/cmake-build-*/
+**/CMakeFiles/
+**/CMakeCache.txt
+*.o
+*.a
+*.so.*
+
+# Large data and generated artifacts
+/datasets/
+/data/
+/weights/
+/checkpoints/
+/outputs/
+/output/
+/results/
+/paper_results/
+/Figures/
+/logs/
+/wandb/
+/tensorboard/
+/hda_roi_semcom/datasets/
+/hda_roi_semcom/checkpoints/
+/hda_roi_semcom/outputs/
+/hda_roi_semcom/paper_results/
+/hda_roi_semcom/Figures/
+/MAGICIAN/data/
+/MAGICIAN/weights/
+/MAGICIAN/results/
+/MAGICIAN/paper/
+/GSFusion/output/
+
+# GSFusion heavy local dependencies
+GSFusion/third_party/libtorch/
+GSFusion/third_party/open3d/
+
+# Paper and temporary build outputs
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.toc
+*.synctex.gz
+/hda_roi_semcom/*.pdf
+/hda_roi_semcom/*.docx
+/MAGICIAN/*.pdf
+/MAGICIAN/*.docx
+
+# System files
+.DS_Store
+Thumbs.db

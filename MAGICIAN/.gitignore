@@ -1,0 +1,6 @@
+*.pyc
+data/
+media/
+weights/
+results/
+scene_complete/

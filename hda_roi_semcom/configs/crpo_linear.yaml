@@ -1,0 +1,13 @@
+mapping_quality:
+  mapping_quality_mode: gsfusion_surrogate
+  n_depth_blocks: 16
+  gsfusion_weights:
+    model: linear
+    bias: 0.23491868
+    w_rgb: 0.31425224
+    w_depth: 0.00000000
+    w_joint: 1.23066502
+    feature_names:
+      - q_rgb
+      - r_depth
+      - q_rgb_times_r_depth

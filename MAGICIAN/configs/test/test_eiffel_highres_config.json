@@ -1,0 +1,24 @@
+{
+  "numGPU": 0,
+  "dataset_path": "./data/Macarons++/macarons++",
+  "test_scenes": [
+    "eiffel"
+  ],
+  "params_name": "macarons_default_training_config.json",
+  "model_name": "macarons/trained_macarons.pth",
+  "results_json_name": "results.json",
+  "test_resolution": 0.05,
+  "use_perfect_depth_map": true,
+  "compute_collision": false,
+  "load_json": false,
+  "random_seed": 8,
+  "torch_seed": 9,
+  "lmdb_dir_name": "magician_lmdb_eiffel_1024",
+  "transmit_high_resolution": true,
+  "planning_image_height": 256,
+  "planning_image_width": 456,
+  "reconstruction_image_height": 1024,
+  "reconstruction_image_width": 1824,
+  "beam_width": 10,
+  "beam_steps": 10
+}

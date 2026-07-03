@@ -1,0 +1,223 @@
+data:
+  root: /home/king/Downloads/Projects/TCOM/datasets/hda_roi_semcom_dataset
+  train_manifest: manifests/train_trajectory_split.jsonl
+  val_manifest: manifests/val_trajectory_split.jsonl
+  test_manifest: manifests/test_trajectory_split.jsonl
+  train_scene_id: null
+  roi_source: mask
+  soft_mask_blur: 9
+  image_size:
+  - 1024
+  - 1824
+  use_original_resolution: true
+  min_rgb_std: 0.0001
+  aux_payload_source: resized_png_bytes
+  aux_payload_size:
+  - 256
+  - 456
+  channels: 3
+  num_workers: 4
+  pin_memory: true
+model:
+  feat_dim: 120
+  feat_stride: 8
+  swin_depth: 6
+  swin_heads: 6
+  swin_window: 8
+  analog_hidden: 256
+  analog_symbols: 512
+  mask_refine: true
+channel:
+  train_snr_min: -2.0
+  train_snr_max: 20.0
+  phy_model: 80211ah_1mhz_ldpc_long_gi
+  channel_bandwidth_hz: 1000000
+  hda_resource_mode: shared_ofdm
+  resource_allocation: discrete_subcarriers
+  digital_resource_ratio_min: 0.5
+  digital_resource_ratio_max: 0.85
+  adaptive_snr_min: -1.0
+  adaptive_snr_max: 30.0
+  digital_resource_ratio: 0.4166666666666667
+  digital_subcarrier_grid:
+  - 10
+  - 12
+  - 14
+  - 16
+  - 18
+  - 20
+  - 22
+  train_snr_points:
+  - 0
+  - 2
+  - 4
+  - 6
+  - 8
+  - 10
+  - 12
+  - 14
+  - 16
+  - 18
+  - 20
+  fft_size: 32
+  data_subcarriers: 24
+  pilot_subcarriers: 2
+  ofdm_dft_duration_us: 32.0
+  guard_interval: long
+  guard_interval_us: 8.0
+  ofdm_symbol_duration_us: 40.0
+  spatial_streams: 1
+  mac_efficiency: 0.8
+  communication_resource_fraction: 0.8
+  slot_duration_s: 0.5
+  digital_quant_bits: 4
+  train_digital_errorfree: true
+  digital_bit_error_rate: 0.0
+  mcs_table:
+  - mcs_index: 10
+    snr_threshold: -1.0
+    modulation: BPSK_REP2
+    n_bpscs: 1
+    code_rate: 0.25
+    ldpc_code_rate: 0.5
+    repetition: 2
+    n_dbps: 6
+    phy_rate_mbps: 0.15
+  - mcs_index: 0
+    snr_threshold: 1.0
+    modulation: BPSK
+    n_bpscs: 1
+    code_rate: 0.5
+    ldpc_code_rate: 0.5
+    repetition: 1
+    n_dbps: 12
+    phy_rate_mbps: 0.3
+  - mcs_index: 1
+    snr_threshold: 4.0
+    modulation: QPSK
+    n_bpscs: 2
+    code_rate: 0.5
+    ldpc_code_rate: 0.5
+    repetition: 1
+    n_dbps: 24
+    phy_rate_mbps: 0.6
+  - mcs_index: 2
+    snr_threshold: 8.0
+    modulation: QPSK
+    n_bpscs: 2
+    code_rate: 0.75
+    ldpc_code_rate: 0.75
+    repetition: 1
+    n_dbps: 36
+    phy_rate_mbps: 0.9
+  - mcs_index: 3
+    snr_threshold: 10.0
+    modulation: 16QAM
+    n_bpscs: 4
+    code_rate: 0.5
+    ldpc_code_rate: 0.5
+    repetition: 1
+    n_dbps: 48
+    phy_rate_mbps: 1.2
+  - mcs_index: 4
+    snr_threshold: 14.0
+    modulation: 16QAM
+    n_bpscs: 4
+    code_rate: 0.75
+    ldpc_code_rate: 0.75
+    repetition: 1
+    n_dbps: 72
+    phy_rate_mbps: 1.8
+  - mcs_index: 5
+    snr_threshold: 17.0
+    modulation: 64QAM
+    n_bpscs: 6
+    code_rate: 0.666667
+    ldpc_code_rate: 0.666667
+    repetition: 1
+    n_dbps: 96
+    phy_rate_mbps: 2.4
+  - mcs_index: 6
+    snr_threshold: 19.0
+    modulation: 64QAM
+    n_bpscs: 6
+    code_rate: 0.75
+    ldpc_code_rate: 0.75
+    repetition: 1
+    n_dbps: 108
+    phy_rate_mbps: 2.7
+  - mcs_index: 7
+    snr_threshold: 24.0
+    modulation: 64QAM
+    n_bpscs: 6
+    code_rate: 0.833333
+    ldpc_code_rate: 0.833333
+    repetition: 1
+    n_dbps: 120
+    phy_rate_mbps: 3.0
+  - mcs_index: 8
+    snr_threshold: 28.0
+    modulation: 256QAM
+    n_bpscs: 8
+    code_rate: 0.75
+    ldpc_code_rate: 0.75
+    repetition: 1
+    n_dbps: 144
+    phy_rate_mbps: 3.6
+  - mcs_index: 9
+    snr_threshold: 30.0
+    modulation: 256QAM
+    n_bpscs: 8
+    code_rate: 0.833333
+    ldpc_code_rate: 0.833333
+    repetition: 1
+    n_dbps: 160
+    phy_rate_mbps: 4.0
+loss:
+  lambda_roi: 13.0
+  lambda_fourier: 0.3
+  lambda_rate: 0.0005
+  lambda_lpips: 0.05
+train:
+  batch_size: 1
+  epochs_stage1: 100
+  epochs_stage2: 60
+  epochs_stage3: 40
+  lr_stage1: 0.0002
+  lr_stage2: 0.0002
+  lr_stage3_codec: 5.0e-05
+  lr_stage3_other: 0.0001
+  grad_clip: 1.0
+  log_every: 50
+  save_dir: checkpoints
+  seed: 42
+  device: cuda
+eval:
+  snr_points:
+  - 0
+  - 2
+  - 4
+  - 6
+  - 8
+  - 10
+  - 12
+  - 14
+  - 16
+  - 18
+  - 20
+  batch_size: 1
+mapping_quality:
+  mapping_quality_mode: gsfusion_surrogate
+  n_depth_blocks: 16
+  gsfusion_weights:
+    model: saturation
+    bias: -0.00733372
+    w_rgb: 0.00000000
+    w_depth: 0.07545491
+    w_joint: 0.88949502
+    lambda_rgb: 3.00000000
+    lambda_depth: 8.00000000
+    feature_names:
+      - g_rgb
+      - g_depth
+      - g_rgb_times_g_depth

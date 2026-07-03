@@ -1,0 +1,11 @@
+torch>=2.0
+torchvision>=0.15
+pyyaml>=6.0
+numpy>=1.23
+pillow>=9.0
+tqdm>=4.64
+pytorch-msssim>=1.0
+einops>=0.6
+lpips>=0.1.4
+gymnasium>=0.29
+stable-baselines3>=2.3

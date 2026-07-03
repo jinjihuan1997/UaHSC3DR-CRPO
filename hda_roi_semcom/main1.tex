@@ -1,0 +1,1736 @@
+\documentclass[journal]{IEEEtran}
+\usepackage{amsmath,amsfonts}
+\usepackage{algorithmic}
+\usepackage{algorithm}
+\usepackage{array}
+\usepackage[caption=false,font=footnotesize]{subfig}
+\usepackage{textcomp}
+\usepackage{stfloats}
+\usepackage{url}
+\usepackage{verbatim}
+\usepackage{graphicx}
+\usepackage{cite}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue
+}
+\hyphenation{op-tical net-works semi-conduc-tor IEEE-Xplore}
+% updated with editorial comments 8/9/2021
+
+\begin{document}
+\title{Constrained Reinforcement Learning for Hybrid Semantic RGB-D Transmission in UAV-Assisted Remote 3D Reconstruction}
+
+\author{Jihuan~Jin,
+        Kaoru~Ota, \IEEEmembership{Member, IEEE},
+        Mianxiong~Dong, \IEEEmembership{Senior Member, IEEE},
+        and~Ekram~Hossain, \IEEEmembership{Fellow, IEEE}%
+\thanks{This work was supported in part by JSPS KAKENHI (Grant Nos. JP24K14910, JP25K00139, and JP26K14792) and JST ASPIRE (Grant No. JPMJAP2344), and in part by the China Scholarship Council (CSC, No. 202308420013). Mianxiong Dong is the corresponding author.}%
+\thanks{Jihuan Jin and Mianxiong Dong are with the Department of Sciences and Informatics, Muroran Institute of Technology, Muroran, Hokkaido, Japan (e-mail: 23096508@muroran-it.ac.jp; mx.dong@csse.muroran-it.ac.jp).}%
+\thanks{Kaoru Ota is with the Graduate School of Information Sciences, Tohoku University, Sendai, Miyagi, Japan (e-mail: k.ota@tohoku.ac.jp).}%
+\thanks{Ekram Hossain is with the Department of Electrical and Computer Engineering, University of Manitoba, Winnipeg, MB R3T~5V6, Canada (e-mail: Ekram.Hossain@umanitoba.ca).}%
+}
+\maketitle
+
+\begin{abstract}
+Timely acquisition of 3D spatial information from disaster areas is critical for damage assessment and rescue deployment in emergency response. UAVs can flexibly access hazardous regions and collect multi-view RGB-D observations. However, the air-to-ground link between a UAV and an emergency response vehicle deployed in a safe area is often impaired by path loss, shadow fading, and limited bandwidth and transmit power, which makes reliable full transmission of raw multimodal observations difficult. To address this problem, this paper proposes a UAV-assisted remote RGB-D 3D reconstruction communication system for post-disaster situational awareness. The system adopts a modality-separated hybrid digital-analog semantic transmission architecture. In this architecture, RGB images are transmitted through an analog semantic JSCC link to preserve the graceful degradation of appearance information, whereas depth maps are transmitted through a digital auxiliary link to ensure geometric usability. This paper establishes a joint subcarrier and power allocation model for the air-to-ground link and formulates RGB-D resource coordination as a CMDP with long-term task-quality constraints. The objective is to improve sequence-level reconstruction quality, while the constraints characterize the degrees of violation in RGB appearance quality and depth geometric usability. To solve this problem, this paper adopts a CRPO-guided PPO method. The method optimizes the reconstruction return when the constraints are satisfied and prioritizes the correction of the most severe task-quality constraint when any constraint is violated. Experimental results with a real GSFusion reconstruction backend show that, compared with fixed-rule allocation, PPO-penalty, and Lagrangian-PPO baselines, the proposed method achieves a more stable resource tradeoff between RGB appearance quality and depth geometric usability. Moreover, an all-digital architecture ablation shows that conventional separate source-channel coding cannot satisfy the appearance-quality requirement in the considered bandwidth regime even under per-slot optimal allocation, and the learned policy attains over $95\%$ of a privileged per-slot enumeration oracle bound while satisfying both long-term constraints without scene-specific multiplier tuning.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Uncrewed aerial vehicle, RGB-D transmission, 3D reconstruction, semantic communication, JSCC, resource allocation, constrained reinforcement learning, air-to-ground communication.
+\end{IEEEkeywords}
+
+\section{Introduction}
+\label{sec:introduction}
+\IEEEPARstart{I}{n} disaster emergency response, timely acquisition of on-site situational information provides an essential basis for damage assessment and rescue deployment. Uncrewed aerial vehicles (UAVs) are widely used in disaster management and field monitoring because they support flexible deployment, aerial observation, and close-range data acquisition~\cite{A1,A2,A3,A4}. Compared with single-view images or sparse sensing data, spatial understanding of disaster sites requires more complete geometric structures and environmental context. Existing studies also show that UAVs play an important role in photogrammetry and three-dimensional modeling by collecting high-resolution visual and spatial observations from the air~\cite{A5,A6}. Motivated by these capabilities, this paper considers UAV-assisted three-dimensional reconstruction for disaster situational awareness. In the considered system, a UAV continuously collects visual and geometric observations of the disaster site and transmits them to an emergency response vehicle (ERV), which performs three-dimensional reconstruction after receiving the scan sequence.
+
+In practical disaster deployments, the ERV is usually placed at a safe location outside the disaster area, whereas the UAV needs to approach hazardous regions for sensing. The UAV therefore needs to transmit multi-view observations to the ERV over a long-distance air-to-ground (A2G) link to support continuous three-dimensional reconstruction. However, A2G links are sensitive to path loss, shadow fading, and time-varying channel conditions~\cite{A7,A8}. At the same time, the bandwidth and transmit power of the UAV platform are limited, and full transmission of raw observations introduces a high communication load and strict link reliability requirements. Under such constrained links, conventional full-data transmission cannot reliably guarantee stable reconstruction quality at the receiver. To address this issue, this paper adopts semantic communication and joint source-channel coding (JSCC) principles, which map the observations collected by the UAV into semantic representations suitable for wireless transmission, thereby reducing the transmission load and improving robustness over constrained A2G links~\cite{A9,A10,A11}. Throughout this paper, the term ``semantic'' is used in the sense of task-oriented learned JSCC: the transmitted representations are learned end-to-end and are evaluated by their contribution to the downstream reconstruction task, rather than obtained by explicit semantic concept extraction or scene understanding at the transmitter.
+
+This paper further adopts a GSFusion-style RGB-D three-dimensional reconstruction framework at the ERV~\cite{A12}. 
+The framework is suitable for the considered system because it explicitly reflects the different roles of RGB and depth observations in reconstruction: depth observations support geometric fusion and surface reconstruction, whereas RGB observations refine color, texture, and appearance consistency. 
+Therefore, the communication system should not treat RGB images and depth maps as identical data streams.
+
+In this type of reconstruction task, RGB images mainly determine scene color, texture, and appearance fidelity, and transmission distortion of RGB images usually leads to continuous quality degradation. 
+Depth maps provide geometric observations, and the completeness of depth maps directly affects the geometric usability and structural accuracy of remote reconstruction. 
+Based on this modality difference, this paper adopts a modality-separated transmission architecture. 
+RGB images are transmitted through an analog semantic JSCC link to preserve appearance information under graceful quality degradation, while depth maps are transmitted through a digital auxiliary link to maintain the geometric usability required for reconstruction at the ERV.
+
+The modality-separated transmission architecture also makes resource allocation more critical. RGB and depth share the same constrained A2G link, and allocating more transmission resources to one modality usually reduces the resources available to the other modality. Prioritizing RGB can improve appearance fidelity but may reduce the completeness of depth-based geometric observations, while prioritizing depth can improve geometric usability at the cost of RGB appearance quality. This tradeoff is difficult to handle with fixed rules. On the one hand, three-dimensional reconstruction quality depends on the joint effect of the entire scan sequence and is evaluated only after the sequence is completed. Both the reconstruction objective and the modality usability requirements are therefore defined as sequence-level averages rather than per-slot targets. This couples the allocation decisions across slots: the tolerable violation budget is shared over the whole sequence, and how much quality shortfall the system may accept in a deep-fade slot depends on how much budget the remaining slots can recover. As shown in Section~\ref{sec:performance_evaluation}, a policy that greedily optimizes each slot in isolation violates the sequence-level depth constraint even when it enumerates the full action space with perfect per-slot information. On the other hand, both RGB appearance quality and depth geometric usability have minimum requirements. If either modality remains below its required threshold for a long period, the reconstructed appearance may become visibly degraded or the geometric structure may become incomplete, which reduces the usability of the recovered information. Therefore, this paper formulates the coordination of RGB and depth transmission resources over constrained A2G links as a sequential decision-making problem with long-term quality constraints. A constrained reinforcement learning method is then used to improve the overall reconstruction performance while satisfying the basic quality requirements of both modalities.
+
+The main contributions of this paper are summarized as follows.
+
+\noindent(1) This paper formulates the coordination of RGB and depth transmission resources for UAV-assisted remote reconstruction as a reconstruction-aware constrained sequential decision-making problem. The formulation optimizes the final three-dimensional reconstruction performance and treats RGB appearance quality and depth geometric usability as long-term task constraints rather than conventional QoS metrics. To provide a per-slot training signal without executing the reconstruction backend online, a saturation-based reconstruction-quality surrogate is calibrated offline against real GSFusion reconstruction results.
+
+\noindent(2) This paper builds a UAV-assisted remote RGB-D reconstruction communication system that adopts a modality-separated hybrid digital-analog transmission design: RGB is transmitted through an analog learned-JSCC link to preserve appearance information with graceful degradation, whereas depth is transmitted through a digital auxiliary link to ensure geometric usability. This design choice is validated by an architecture ablation against an all-digital RGB variant that uses conventional separate source-channel coding over the same physical-layer abstraction.
+
+\noindent(3) This paper tailors a CRPO-guided PPO method to solve the resulting constrained Markov decision process. The method optimizes the reconstruction return when the constraints are satisfied and prioritizes correcting the most severely violated task-quality constraint otherwise. Its effectiveness is verified through comparisons with rule-based baselines, penalty-based and Lagrangian PPO, and a per-slot enumeration oracle that upper-bounds slot-wise allocation with privileged information.
+
+The remainder of this paper is organized as follows. Section~\ref{sec:related_work} reviews the related work. Section~\ref{sec:system_model} introduces the proposed system model and the modality-separated RGB-D transmission architecture. Section~\ref{sec:problem_formulation} formulates the resource allocation optimization problem. Section~\ref{sec:methodology} presents the proposed constrained reinforcement learning method. Section~\ref{sec:performance_evaluation} provides the experimental results and performance analysis. Section~\ref{sec:conclusion} concludes this paper.
+
+\section{Related Work}
+\label{sec:related_work}
+\subsection{Semantic Visual Transmission and Joint Source-Channel Coding}
+
+Semantic communication and joint source-channel coding (JSCC) offer an effective paradigm for visual data transmission over constrained wireless links. Conventional wireless image transmission usually relies on separate source and channel coding, where images are first compressed and then protected against channel errors through channel coding and modulation. However, under low-latency, bandwidth-limited, and time-varying channel conditions, this separated architecture is sensitive to channel mismatch and low SNR, and may suffer from the cliff effect. DeepJSCC addresses this limitation by jointly learning image compression, channel coding, and receiver-side reconstruction with an end-to-end neural network. Instead of producing bit streams, it directly maps images into continuous-valued channel symbols, which leads to smoother quality degradation than conventional separate digital schemes under low-SNR and bandwidth-limited conditions~\cite{B1}.
+
+Following DeepJSCC, subsequent studies improve wireless visual transmission from several aspects, including feedback utilization, bandwidth adaptation, channel awareness, physical-layer adaptation, and network architecture design. DeepJSCC-f uses channel output feedback to improve reconstruction quality or reduce transmission latency~\cite{B2}. Bandwidth-agile DeepJSCC supports progressive transmission and multiple-description transmission, which improves adaptability to heterogeneous bandwidth conditions~\cite{B3}. Attention-based JSCC and entropy-aware rate control dynamically allocate transmission resources according to SNR, feature importance, or feature entropy~\cite{B4,B5}. OFDM-based JSCC and MIMO-based JSCC extend learning-based JSCC to practical transmission environments with multipath fading, OFDM, and multiple antennas~\cite{B6,B7}. NTSCC~\cite{B8}, online learned NTSCC~\cite{B9}, and GenerativeJSCC~\cite{B10} further introduce nonlinear transform coding, online adaptation, and perceptual quality optimization to improve semantic image transmission under different data distributions, channel conditions, and perceptual metrics. WITT, SwinJSCC, and multi-scale vision Transformer further show that Transformer-based architectures can enhance high-resolution semantic image transmission and robustness~\cite{B11,B12,B13}.
+
+In addition to analog JSCC, digital semantic communication and hybrid digital-analog transmission provide important insights for the modality-separated design in this paper. Classical hybrid digital-analog source-channel coding shows that combining digital and analog components can exploit both the reliability of digital transmission and the graceful degradation property of analog transmission~\cite{B14}. More recently, HDA-DeepSC introduces the hybrid digital-analog principle into semantic communication, where analog-digital allocation and fusion combine the advantages of analog SemCom and digital SemCom~\cite{B15}. Studies on $\mathrm{D}^{2}$-JSCC~\cite{B16}, joint coding-modulation~\cite{B17}, and channel-adaptive digital semantic communication~\cite{B18} further show that digital semantic communication can improve compatibility with existing digital communication systems through digital channel coding, modulation design, and channel adaptation.
+
+\subsection{UAV-assisted 3D Mapping and RGB-D Reconstruction}
+
+UAV-assisted three-dimensional mapping has been widely used in structural inspection, disaster assessment, and large-scale scene modeling. Existing studies on UAV-based three-dimensional reconstruction mainly focus on sensing-side problems, such as planning UAV viewpoints and flight paths to obtain more complete scene coverage and higher-quality reconstruction inputs~\cite{C1}. Along this line, active SLAM, active mapping, and next-best-view (NBV) planning investigate how UAVs can actively acquire informative observations from different perspectives~\cite{C2}. Further studies consider sensing-side decision-making problems, including multi-UAV cooperative surface reconstruction~\cite{C3}, frontier-based hierarchical exploration~\cite{C4}, RGB self-supervised coverage prediction~\cite{C5}, aerial reconstruction planning with surface prediction~\cite{C6}, and long-term active mapping based on Imagined Gaussians~\cite{C7}. These studies indicate that trajectory and viewpoint planning for UAV mapping have been extensively investigated. In contrast to these works, this paper does not redesign the active mapping planner, but instead takes the generated scanning trajectory as a given input.
+
+On the reconstruction side, RGB-D mapping and dense surface reconstruction have developed into mature technical routes. Volumetric fusion~\cite{C8}, KinectFusion~\cite{C9}, ElasticFusion~\cite{C10}, and BundleFusion~\cite{C11} show that depth observations can directly support geometric fusion, surface recovery, and globally consistent dense reconstruction. Recent 3D Gaussian Splatting provides an effective approach for high-quality and real-time explicit appearance representation~\cite{C12}, and has been further extended to RGB-D SLAM and Gaussian-based surface reconstruction, such as SplaTAM~\cite{C13} and MILo~\cite{C14}. GSFusion combines truncated signed distance field (TSDF) fusion with Gaussian Splatting for online RGB-D mapping. In this framework, depth data are fused into the TSDF grid to preserve geometric structures, while RGB observations are used to optimize the appearance representation of the Gaussian map~\cite{A12}. Overall, these reconstruction methods reflect the distinct functions of RGB and depth in RGB-D reconstruction.
+
+However, existing studies on UAV active mapping and RGB-D reconstruction usually focus on sensing planning or reconstruction algorithms, while the communication bottleneck in remote mapping remains less explored. This paper targets online resource allocation for UAV-to-ERV RGB-D data transmission. Given a scanning trajectory and a predefined GSFusion-style reconstruction backend, this paper studies the coordination of RGB-D transmission resources over constrained A2G links. It improves the final three-dimensional reconstruction quality by coordinating RGB semantic JSCC and depth digital auxiliary transmission.
+
+\subsection{Reinforcement Learning for Wireless Resource Allocation}
+
+Wireless resource allocation usually involves time-varying channels, coupled resources, and online decisions. Conventional optimization methods often rely on accurate models and are difficult to adapt in real time to dynamic environments. In recent years, machine learning, especially deep reinforcement learning (DRL), has been widely used for power control, bandwidth scheduling, and computation resource allocation in wireless communications~\cite{D1}. In UAV networks and highly dynamic mobile networks, link quality, interference states, and task requirements vary over time, which further increases the complexity of resource allocation. Existing studies apply DRL to anti-jamming resource management in UAV-assisted mobile edge computing (MEC)~\cite{D2}, and use multi-agent reinforcement learning (MARL) for multi-agent resource trading decisions in platooning-assisted vehicular networks~\cite{D3}. These studies show that RL and DRL are suitable for sequential resource decision-making in dynamic wireless networks.
+
+With the development of semantic communication and task-oriented communication, resource allocation objectives are shifting from conventional bit-level metrics to semantic-level and task-level utility. Task-oriented semantic communication does not focus only on throughput, spectral efficiency, or energy consumption, but emphasizes the contribution of transmitted content to the target task. Therefore, resource allocation needs to jointly consider semantic importance, task performance, and user experience~\cite{D4}. Existing studies use DRL to dynamically optimize semantic compression ratio, transmit power, and bandwidth, so that data carrying richer semantic information can receive higher priority in communication resource allocation~\cite{D5}. Recent work further studies multi-modal semantic resource allocation in UAV collaborative networks, where UAV trajectory, spectrum bandwidth, transmit power, and the number of semantic symbols are jointly optimized to balance semantic QoE and transmission overhead~\cite{D6}.
+
+From the algorithmic perspective, standard DRL or PPO can learn dynamic resource allocation policies. However, when the system needs to maximize long-term reward while satisfying long-term quality constraints, simple reward shaping or penalty-based PPO may fail to provide stable constraint satisfaction. The constrained Markov decision process (CMDP) provides a standard modeling framework for long-term reward maximization under long-term constraints~\cite{D7}. PPO is commonly used as a basic policy optimizer because it is easy to implement and provides stable policy updates~\cite{D8}. CPO~\cite{D9} and RCPO~\cite{D10} further incorporate constraints into the policy optimization process. CRPO adopts a primal approach that switches between objective improvement and constraint rectification. It optimizes the objective reward when the constraints are satisfied, and prioritizes constraint rectification when any constraint is violated~\cite{D11}. In addition, recent safe DRL methods have been applied to wireless resource allocation to handle constraints related to PAoI violation, transmit power, and scheduling~\cite{D12}. This constrained learning principle is well suited to the problem considered in this paper, because RGB transmission quality and depth auxiliary completeness are not ordinary communication QoS metrics, but task constraints that directly affect three-dimensional reconstruction results.
+
+In summary, existing studies have investigated dynamic wireless resource allocation, semantic-aware resource allocation, and constrained DRL from different perspectives. However, for UAV-to-ERV RGB-D data transmission driven by three-dimensional reconstruction, how to characterize the effects of modality-specific transmission quality on reconstruction results and formulate these effects as long-term task constraints remains underexplored. Existing methods usually abstract task performance as unified semantic QoE or transmission utility, with limited attention to the distinct roles of RGB and depth in three-dimensional reconstruction. Therefore, this paper takes the reconstruction quality at the ERV as the optimization objective, models RGB appearance quality and depth geometric usability as long-term task constraints, and adopts CRPO-guided PPO to coordinate RGB semantic JSCC with depth digital auxiliary transmission, thereby improving three-dimensional mapping quality over constrained A2G links.
+
+\section{System Model}
+\label{sec:system_model}
+As shown in Fig.~\ref{fig1:system_model}, the proposed system consists of a UAV and an emergency response vehicle (ERV). The UAV is equipped with an RGB-D camera and continuously scans a building area. The ERV acts as a remote receiving and computing node, receives the visual observations transmitted by the UAV, and performs three-dimensional reconstruction based on GSFusion~\cite{A12}.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{Figures/Fig1_system_model.pdf}
+\caption{System model of UAV-assisted RGB-D transmission and remote 3D reconstruction.}
+\label{fig1:system_model}
+\end{figure}
+
+The scanning trajectory is generated by an active mapping method~\cite{C7} and is treated as an external task input. Communication resource optimization is performed only within the transmission window after each RGB-D observation is captured. Given the UAV trajectory, this paper focuses on per-slot communication resource allocation for three-dimensional reconstruction. The objective is to dynamically coordinate the transmission resources of RGB images and depth maps to improve the reconstruction quality and stability at the ERV. To avoid notation ambiguity, the following sections use $Q_{\mathrm{rgb}}[t]$ to denote the received RGB reconstruction quality and $R_{\mathrm{dep}}[t]$ to denote the partial transmission success ratio of the depth map.
+
+\subsection{Task Model and RGB-D Reconstruction Pipeline}
+
+The goal of active three-dimensional mapping is to improve scene coverage, geometric completeness, and reconstruction quality in an unknown or partially unknown environment by continuously collecting multi-view RGB-D observations. This paper treats active mapping planning, UAV motion, and image acquisition as external task processes and does not model their latency. Instead, it focuses on the data transmission stage after each RGB-D observation is generated. Once an RGB-D observation is captured, the system enters one communication slot, where one resource allocation decision is made and the observation is transmitted. In communication slot $t$, the UAV is located at camera pose $p_u[t]$ and obtains the current RGB-D observation as
+\begin{equation}
+o[t]
+=
+\left(
+I_{\mathrm{rgb}}[t],
+I_{\mathrm{dep}}[t],
+p_u[t]
+\right),
+\end{equation}
+where $I_{\mathrm{rgb}}[t]\in\mathbb{R}^{H\times W\times 3}$ denotes the RGB image and $I_{\mathrm{dep}}[t]\in\mathbb{R}^{H\times W}$ denotes the depth map. Here, $H$ and $W$ denote the image height and width, respectively. The RGB image provides color, texture, and appearance information, while the depth map provides per-pixel geometric distance observations. The camera pose is used to project multi-frame RGB-D observations into a unified global coordinate system. Since the data size of pose information is much smaller than that of image data, this paper ignores its communication load and assumes that the camera pose is provided by the UAV navigation system.
+
+The UAV transmits the captured RGB image and depth map to the ERV. The ERV maintains the received observation history up to the current communication slot as
+\begin{equation}
+\widetilde{\mathcal{O}}_t
+=
+\left\{
+\left(
+\widetilde{I}_{\mathrm{rgb}}[\tau],
+\widetilde{I}_{\mathrm{dep}}[\tau],
+p_u[\tau]
+\right)
+\right\}_{\tau=0}^{t},
+\end{equation}
+where $\widetilde{I}_{\mathrm{rgb}}[t]$ and $\widetilde{I}_{\mathrm{dep}}[t]$ denote the RGB image and depth map recovered after wireless transmission and receiver-side reconstruction, respectively. Due to wireless channel noise and limited bandwidth and power resources, the received observations are generally different from the original observations.
+
+The ERV adopts a GSFusion-style RGB-D reconstruction backend, where depth maps are fused into a TSDF voxel structure to maintain geometric surfaces, and RGB images are used to optimize the color, opacity, and appearance consistency of 3D Gaussians. Therefore, this paper uses the successful transmission ratio of depth to characterize geometric usability, uses the received quality of RGB to characterize appearance fidelity, and incorporates both factors into the final three-dimensional reconstruction quality model.
+
+\subsection{Modality-Separated RGB-D Transmission Architecture}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.95\textwidth]{Figures/Fig2_system_process.pdf}
+\caption{Modality-separated RGB-D transmission and reconstruction process.}
+\label{fig2:system_process}
+\end{figure*}
+
+This paper adopts a modality-separated transmission architecture for RGB-D three-dimensional reconstruction. As shown in Fig.~\ref{fig2:system_process}, RGB images are transmitted through an analog semantic JSCC link to preserve appearance information. Depth maps are transmitted as a digital auxiliary stream to provide geometric observations and support TSDF fusion and the initialization of Gaussian primitives.
+
+In the communication model, the UAV-to-ERV uplink uses OFDM transmission. The RGB transmission stream and the depth transmission stream share the same constrained A2G link, but are allocated different numbers of data subcarriers and different transmit-power fractions in each communication slot. Within each OFDM symbol, the subcarriers assigned to the depth stream carry standard digitally modulated symbols, whereas the subcarriers assigned to the RGB stream carry discrete-time continuous-amplitude JSCC symbols, following the subcarrier-level multiplexing principle of hybrid digital-analog transmission~\cite{B14,B15}; the two streams are power-normalized separately according to their allocated transmit powers. Therefore, the two streams experience the same large-scale link gain, but have different numbers of available channel symbols and different received SNR values due to resource allocation. For the RGB stream, the received quality is mainly determined by the number of available channel symbols and the SNR. For the depth stream, the number of transmittable bits is further affected by the SNR and the MCS. Based on this resource partition model, the next subsection establishes the A2G channel model and characterizes the subcarrier allocation, power allocation, and SNR of the RGB and depth transmission streams.
+
+\subsection{A2G Channel Model and Joint Subcarrier-Power Allocation}
+
+In communication slot $t$, the position of the UAV is determined by the given scanning trajectory and is denoted by
+\begin{equation}
+q_u[t]
+=
+\left(
+x_u[t],
+y_u[t],
+H_u[t]
+\right),
+\end{equation}
+where $q_u[t]$ is the translation component of the camera pose $p_u[t]$ introduced in Section~\ref{sec:system_model}-A; the orientation component affects only the captured observation and does not enter the link budget.
+The ERV location is fixed and is denoted by
+\begin{equation}
+q_d
+=
+\left(
+x_d,
+y_d,
+H_d
+\right).
+\end{equation}
+The three-dimensional distance and horizontal distance between the UAV and the ERV are respectively given by
+\begin{equation}
+d[t]
+=
+\left\|
+q_u[t]-q_d
+\right\|_2,
+\end{equation}
+\begin{equation}
+r_h[t]
+=
+\sqrt{
+\left(x_u[t]-x_d\right)^2
++
+\left(y_u[t]-y_d\right)^2
+}.
+\end{equation}
+The elevation angle used in the LoS probability model is measured in degrees and is given by
+\begin{equation}
+\theta[t]
+=
+\frac{180}{\pi}
+\arctan
+\left(
+\frac{H_u[t]-H_d}{r_h[t]}
+\right).
+\end{equation}
+
+This paper adopts a link budget model based on the A2G LoS probability. The free-space path loss is given by
+\begin{equation}
+L_{\mathrm{FS}}[t]
+=
+20\log_{10}
+\left(
+\frac{4\pi f_c d[t]}{c}
+\right),
+\end{equation}
+where $f_c$ is the carrier frequency and $c$ is the speed of light. The LoS probability of the A2G link is modeled as
+\begin{equation}
+P_{\mathrm{LoS}}[t]
+=
+\frac{1}
+{
+1
++
+a_{\mathrm{LoS}}
+\exp
+\left[
+-
+b_{\mathrm{LoS}}
+\left(
+\theta[t]
+-
+a_{\mathrm{LoS}}
+\right)
+\right]
+},
+\end{equation}
+where $a_{\mathrm{LoS}}$ and $b_{\mathrm{LoS}}$ are environment-dependent LoS model parameters. The corresponding NLoS probability is
+\begin{equation}
+P_{\mathrm{NLoS}}[t]
+=
+1-P_{\mathrm{LoS}}[t].
+\end{equation}
+Considering the additional losses under LoS and NLoS conditions and large-scale shadow fading, the average path loss is given by
+\begin{equation}
+L[t]
+=
+L_{\mathrm{FS}}[t]
++
+P_{\mathrm{LoS}}[t]\eta_{\mathrm{LoS}}
++
+P_{\mathrm{NLoS}}[t]\eta_{\mathrm{NLoS}}
++
+\xi[t],
+\end{equation}
+where $\eta_{\mathrm{LoS}}$ and $\eta_{\mathrm{NLoS}}$ denote the additional losses under LoS and NLoS conditions, respectively, and $\xi[t]\sim\mathcal{N}(0,\sigma_{\xi}^{2})$ denotes large-scale shadow fading. For tractability, the shadow-fading terms are drawn independently across communication slots; this is a simplification of the spatially correlated shadowing that a moving UAV would experience along its trajectory, and the same realization is shared by the RGB and depth streams within a slot. The corresponding linear link gain is
+\begin{equation}
+h[t]
+=
+10^{-L[t]/10}.
+\end{equation}
+
+Based on the modality-separated transmission architecture, the same A2G link is divided into an RGB transmission stream and a depth transmission stream in each communication slot. Let $K$ denote the total number of data subcarriers. The number of subcarriers allocated to the depth stream is
+\begin{equation}
+k_D[t]
+\in
+\mathcal{K}_D,
+\end{equation}
+where $\mathcal{K}_D$ denotes the candidate set of data subcarrier numbers for the depth stream. The RGB stream obtains the remaining subcarriers as
+\begin{equation}
+k_R[t]
+=
+K-k_D[t].
+\end{equation}
+
+Meanwhile, the total transmit power of the system is fixed as $P_{\mathrm{tot}}$. Let the power ratio allocated to the depth stream be
+\begin{equation}
+\beta_D[t]
+\in
+\mathcal{P}_D,
+\qquad
+0<\beta_D[t]<1,
+\end{equation}
+where $\mathcal{P}_D$ denotes the candidate set of power allocation ratios for the depth stream. The transmit powers of the depth stream and the RGB stream are then given by
+\begin{equation}
+P_D[t]
+=
+\beta_D[t]P_{\mathrm{tot}},
+\end{equation}
+\begin{equation}
+P_R[t]
+=
+\left(1-\beta_D[t]\right)P_{\mathrm{tot}}.
+\end{equation}
+This paper considers resource partitioning under a fixed total power budget, namely
+\begin{equation}
+P_D[t]+P_R[t]
+=
+P_{\mathrm{tot}}.
+\end{equation}
+
+Let $B_{\mathrm{sc}}=B/K$ denote the bandwidth of each data subcarrier, $N_0$ denote the noise power spectral density at the receiver in linear scale, and $F$ denote the noise figure in linear scale. Under the assumption that transmit power is uniformly allocated within each transmission stream, the per-subcarrier SNR of the RGB stream is
+\begin{equation}
+\gamma_{\mathrm{rgb}}[t]
+=
+\frac{
+P_R[t]h[t]
+}
+{
+k_R[t]N_0B_{\mathrm{sc}}F
+},
+\end{equation}
+and the per-subcarrier SNR of the depth stream is
+\begin{equation}
+\gamma_{\mathrm{dep}}[t]
+=
+\frac{
+P_D[t]h[t]
+}
+{
+k_D[t]N_0B_{\mathrm{sc}}F
+}.
+\end{equation}
+The corresponding dB forms are
+\begin{equation}
+\gamma_{\mathrm{rgb}}^{\mathrm{dB}}[t]
+=
+10\log_{10}
+\left(
+\gamma_{\mathrm{rgb}}[t]
+\right),
+\end{equation}
+\begin{equation}
+\gamma_{\mathrm{dep}}^{\mathrm{dB}}[t]
+=
+10\log_{10}
+\left(
+\gamma_{\mathrm{dep}}[t]
+\right).
+\end{equation}
+This model captures the coupling between subcarrier allocation and power allocation. Increasing the number of subcarriers for one transmission stream increases the number of available resource elements, but may also reduce the per-subcarrier SNR when the power ratio remains unchanged. Therefore, $k_D[t]$ and $\beta_D[t]$ are used as the decision variables for subcarrier and power allocation, respectively.
+
+Let $T_{\mathrm{sym}}$ denote the OFDM symbol duration, $\Delta t$ denote the communication slot length, and $\alpha_c$ denote the fraction of time available for communication. The effective number of OFDM symbols in each communication slot is
+\begin{equation}
+N_{\mathrm{sym}}
+=
+\left\lfloor
+\frac{
+\alpha_c\Delta t
+}
+{
+T_{\mathrm{sym}}
+}
+\right\rfloor.
+\end{equation}
+Therefore, the numbers of OFDM resource elements obtained by the RGB stream and the depth stream are
+\begin{equation}
+N_{\mathrm{RE},R}[t]
+=
+k_R[t]N_{\mathrm{sym}},
+\end{equation}
+\begin{equation}
+N_{\mathrm{RE},D}[t]
+=
+k_D[t]N_{\mathrm{sym}}.
+\end{equation}
+
+\subsection{RGB Image Semantic JSCC Link}
+
+RGB images are transmitted through an analog semantic JSCC link. An RGB image first passes through a semantic encoder to extract visual semantic features. Let $f_{\phi}$ denote the semantic encoder, where $\phi$ denotes its network parameters. The semantic feature is given by
+\begin{equation}
+z[t]
+=
+f_{\phi}
+\left(
+I_{\mathrm{rgb}}[t]
+\right).
+\end{equation}
+Then, the semantic feature is mapped into continuous-valued complex channel symbols by an analog channel encoder:
+\begin{equation}
+x_{\mathrm{rgb}}[t]
+=
+g_{\psi}
+\left(
+z[t]
+\right),
+\end{equation}
+where $g_{\psi}$ denotes the analog channel encoder and $\psi$ denotes its parameters. The number of channel symbols available for the RGB semantic link is determined by the allocated OFDM resources as
+\begin{equation}
+L_{\mathrm{rgb}}[t]
+=
+N_{\mathrm{RE},R}[t].
+\end{equation}
+Since the subcarrier and power allocation changes from slot to slot, $L_{\mathrm{rgb}}[t]$ is time-varying. To support all allocations with a single codec, the analog channel encoder maps the semantic feature to a symbol block whose length equals the maximum possible RGB allocation, namely $L_{\max}=\max_{k_D\in\mathcal{K}_D}(K-k_D)N_{\mathrm{sym}}$. In each slot, only the first $L_{\mathrm{rgb}}[t]$ symbols of this block are transmitted, and the receiver zero-fills the untransmitted positions before analog channel decoding. The encoder-decoder pair is trained under randomly sampled subcarrier allocations, power ratios, and SNRs, so that the learned representation degrades gracefully under symbol truncation, in a manner similar to bandwidth-agile JSCC~\cite{B3}. Consequently, a single trained model serves the entire discrete action space without per-allocation retraining.
+Before transmission, the complex channel symbols are normalized to unit average power:
+\begin{equation}
+\bar{x}_{\mathrm{rgb}}[t]
+=
+\frac{
+x_{\mathrm{rgb}}[t]
+}
+{
+\sqrt{
+\frac{1}{L_{\mathrm{rgb}}[t]}
+\left\|
+x_{\mathrm{rgb}}[t]
+\right\|_2^2
+}
+}.
+\end{equation}
+This normalization ensures that the transmitted symbols corresponding to different input images have the same average symbol power. The actual transmit power is determined by $P_R[t]$ and enters the AWGN channel model through $\gamma_{\mathrm{rgb}}[t]$. Under the baseband model, the RGB semantic JSCC link is given by
+\begin{equation}
+y_{\mathrm{rgb}}[t]
+=
+\sqrt{
+\gamma_{\mathrm{rgb}}[t]
+}
+\bar{x}_{\mathrm{rgb}}[t]
++
+n_{\mathrm{rgb}}[t],
+\end{equation}
+where
+\begin{equation}
+n_{\mathrm{rgb}}[t]
+\sim
+\mathcal{CN}
+\left(
+0,
+\mathbf{I}_{L_{\mathrm{rgb}}[t]}
+\right).
+\end{equation}
+Here, $\mathbf{I}_{L_{\mathrm{rgb}}[t]}$ denotes the $L_{\mathrm{rgb}}[t]$-dimensional identity matrix. The receiver first recovers the semantic feature through an analog channel decoder:
+\begin{equation}
+\hat{z}[t]
+=
+g_{\omega}^{-1}
+\left(
+y_{\mathrm{rgb}}[t]
+\right),
+\end{equation}
+and then reconstructs the RGB image through a semantic decoder:
+\begin{equation}
+\widetilde{I}_{\mathrm{rgb}}[t]
+=
+f_{\varphi}^{-1}
+\left(
+\hat{z}[t]
+\right).
+\end{equation}
+
+This paper uses peak signal-to-noise ratio (PSNR) to measure the quality of the received RGB image. Given the original RGB image $I_{\mathrm{rgb}}[t]$ and the receiver-side reconstructed image $\widetilde{I}_{\mathrm{rgb}}[t]$, the PSNR is denoted by
+\begin{equation}
+\mathrm{PSNR}_{\mathrm{rgb}}[t]
+=
+10\log_{10}
+\left(
+\frac{
+I_{\max}^{2}
+}
+{
+\operatorname{MSE}
+\left(
+I_{\mathrm{rgb}}[t],
+\widetilde{I}_{\mathrm{rgb}}[t]
+\right)
+}
+\right),
+\end{equation}
+where $I_{\max}$ denotes the maximum pixel value and 
+$\operatorname{MSE}(\cdot)$ denotes the mean squared error. 
+For subsequent optimization, the PSNR is normalized into the RGB received 
+quality variable $Q_{\mathrm{rgb}}[t]\in[0,1]$ as
+\begin{equation}
+Q_{\mathrm{rgb}}[t]
+=
+\operatorname{clip}
+\left(
+\frac{
+\mathrm{PSNR}_{\mathrm{rgb}}[t]
+-
+\mathrm{PSNR}_{\min}
+}
+{
+\mathrm{PSNR}_{\max}
+-
+\mathrm{PSNR}_{\min}
+},
+0,
+1
+\right).
+\label{eq:q_rgb_normalization}
+\end{equation}
+
+\subsection{Depth Digital Auxiliary Link}
+
+Unlike RGB images, the depth map is not fed into the RGB semantic encoder. 
+Instead, it is transmitted through a digital auxiliary link as the direct geometric observation required by GSFusion-style RGB-D reconstruction. 
+Before digital transmission, each depth map is divided into independently decodable tiles. 
+Each tile contains a local depth block and its corresponding header, so that partial delivery of the digital auxiliary stream corresponds to the successful recovery of a subset of depth tiles rather than an arbitrary prefix of a single compressed bitstream.
+
+This paper estimates the digital auxiliary load of the depth map by the total number of bytes after tile-wise lossless serialization and compression.
+In the experiments, each depth map is downsampled to $256\times456$, partitioned into $N_{\mathrm{tile}}=16$ tiles, and each tile is losslessly compressed before transmission.
+Let $S_D[t]$ denote the total number of bytes of all depth tiles generated from $I_{\mathrm{dep}}[t]$ in communication slot $t$.
+The corresponding number of bits is
+\begin{equation}
+B_D[t]
+=
+8S_D[t].
+\end{equation}
+
+The digital auxiliary link adopts an 802.11ah MCS bit-budget abstraction. 
+Given the SNR of the depth stream in the current communication slot, the system selects the highest MCS that can be supported according to the MCS threshold table:
+\begin{equation}
+m^{\star}[t]
+=
+\max
+\left\{
+m\in\mathcal{M}:
+\gamma_{\mathrm{dep}}^{\mathrm{dB}}[t]\ge\Gamma_m
+\right\},
+\end{equation}
+where $\mathcal{M}$ denotes the candidate MCS set and $\Gamma_m$ denotes the required SNR threshold of MCS $m$. 
+If no MCS satisfies the SNR requirement, the depth digital auxiliary link is treated as being in outage and the supported bit budget is set to zero.
+
+Let $\mu_{m^{\star}}$ denote the number of modulation bits per subcarrier symbol under the selected MCS, $r_{m^{\star}}$ denote the channel coding rate, and $\eta_{\mathrm{MAC}}$ denote the MAC-layer efficiency. 
+When a feasible MCS is selected, the uplink bit budget supported by the depth digital auxiliary link in communication slot $t$ is given by
+\begin{equation}
+C_D[t]
+=
+\eta_{\mathrm{MAC}}
+N_{\mathrm{RE},D}[t]
+r_{m^{\star}}
+\mu_{m^{\star}}.
+\end{equation}
+Otherwise, $C_D[t]=0$.
+
+To model partial delivery at the tile level, this paper counts the number of complete tiles that fit into the supported bit budget. Assuming approximately equal tile sizes, the recovered depth availability ratio is
+\begin{equation}
+R_{\mathrm{dep}}[t]
+=
+\frac{1}{N_{\mathrm{tile}}}
+\min
+\left\{
+\left\lfloor
+\frac{
+N_{\mathrm{tile}}\,C_D[t]
+}
+{
+B_D[t]
+}
+\right\rfloor,
+N_{\mathrm{tile}}
+\right\}
+\in[0,1].
+\end{equation}
+Here, $R_{\mathrm{dep}}[t]$ represents the recoverable depth-tile ratio under the bit-budget abstraction, quantized at tile granularity.
+When $R_{\mathrm{dep}}[t]=1$, the current depth map can be completely transmitted. 
+When $R_{\mathrm{dep}}[t]=0$, no depth tile is available at the ERV. 
+When $0<R_{\mathrm{dep}}[t]<1$, only the recovered depth tiles are used for TSDF fusion and subsequent Gaussian initialization, while unrecovered tiles are treated as invalid depth regions.
+\section{Optimization Problem Formulation}
+\label{sec:problem_formulation}
+
+Given the external scanning trajectory and the RGB-D observation sequence, this paper formulates UAV-to-ERV transmission resource coordination as a slot-level optimization problem with long-term quality constraints. In each communication slot, the decision variables are the number of subcarriers $k_D[t]$ and the transmit-power ratio $\beta_D[t]$ allocated to the depth transmission stream. The RGB transmission stream obtains the remaining subcarriers and transmit-power resources.
+
+The final three-dimensional reconstruction quality can be evaluated only after the complete observation sequence is processed. Therefore, it is difficult to directly use the final reconstruction quality as a per-slot optimization objective during policy training. To provide a lightweight training signal, this paper introduces an offline fitted reconstruction-aware surrogate function. The surrogate maps the received RGB-D quality of each communication slot to a per-slot reconstruction-quality proxy, which is used to guide resource allocation without executing the full GSFusion-style reconstruction backend during training.
+
+Under the current resource allocation, the system obtains the RGB received quality $Q_{\mathrm{rgb}}[t]$ and the partial transmission success ratio of depth $R_{\mathrm{dep}}[t]$. These two modality-specific quality indicators are then mapped to the per-slot reconstruction-quality proxy as
+\begin{equation}
+\hat{Q}_{\mathrm{rec}}[t]
+=
+\kappa_{\mathrm{sur}}
+\left(
+Q_{\mathrm{rgb}}[t],
+R_{\mathrm{dep}}[t]
+\right).
+\end{equation}
+
+Here, $\kappa_{\mathrm{sur}}(\cdot)$ denotes a saturation-based reconstruction-aware surrogate function fitted from offline GSFusion-style reconstruction experiments. It is used as a lightweight quality proxy for policy learning rather than as an exact marginal contribution of an individual frame to the final reconstruction result. This paper adopts the following empirical form:
+\begin{equation}
+\begin{aligned}
+\kappa_{\mathrm{sur}}
+\left(
+Q_{\mathrm{rgb}},
+R_{\mathrm{dep}}
+\right)
+=
+\mathrm{clip}
+\Big(
+&
+b
++
+w_r g_r
+\left(
+Q_{\mathrm{rgb}}
+\right)
++
+w_d g_d
+\left(
+R_{\mathrm{dep}}
+\right)
+\\
+&
++
+w_j g_r
+\left(
+Q_{\mathrm{rgb}}
+\right)
+g_d
+\left(
+R_{\mathrm{dep}}
+\right),
+0,
+1
+\Big).
+\end{aligned}
+\end{equation}
+
+The modality-wise saturation functions are given by
+\begin{equation}
+g_r
+\left(
+Q_{\mathrm{rgb}}
+\right)
+=
+1-\exp
+\left(
+-\lambda_r Q_{\mathrm{rgb}}
+\right),
+\end{equation}
+and
+\begin{equation}
+g_d
+\left(
+R_{\mathrm{dep}}
+\right)
+=
+1-\exp
+\left(
+-\lambda_d R_{\mathrm{dep}}
+\right).
+\end{equation}
+
+In this surrogate function, $b$ is a bias term that captures the constant effect, while $w_r$, $w_d$, and $w_j$ denote the contribution weights of RGB received quality, depth geometric completeness, and joint RGB-D usability, respectively. The parameters $\lambda_r$ and $\lambda_d$ control the saturation rates of the two modality contributions. Since reconstruction difficulty varies substantially across scanning trajectories of the same scene, the functional form above is shared, but its parameters are calibrated separately for each scanning trajectory from offline reconstruction runs; the calibration protocol and validation results are given in Section~\ref{sec:performance_evaluation}-B.
+
+To characterize the basic task usability of RGB and depth, the instantaneous violation costs are defined as
+\begin{equation}
+c_R[t]
+=
+\max
+\left(
+Q_{\mathrm{thr}}-Q_{\mathrm{rgb}}[t],
+0
+\right),
+\end{equation}
+and
+\begin{equation}
+c_D[t]
+=
+\max
+\left(
+R_{\mathrm{thr}}-R_{\mathrm{dep}}[t],
+0
+\right).
+\end{equation}
+
+Since the A2G link fluctuates over time, this paper adopts sequence-average constraints rather than per-slot hard constraints. The average surrogate reconstruction quality is defined as
+\begin{equation}
+J_{\mathrm{rec}}
+=
+\frac{1}{T}
+\sum_{t=0}^{T-1}
+\widehat{Q}_{\mathrm{rec}}[t].
+\end{equation}
+
+The average RGB quality violation degree and the average depth geometric usability violation degree are defined as
+\begin{equation}
+J_{C_R}
+=
+\frac{1}{T}
+\sum_{t=0}^{T-1}
+c_R[t],
+\end{equation}
+and
+\begin{equation}
+J_{C_D}
+=
+\frac{1}{T}
+\sum_{t=0}^{T-1}
+c_D[t],
+\end{equation}
+respectively. Here, $J_{\mathrm{rec}}$ denotes the average surrogate reconstruction quality, while $J_{C_R}$ and $J_{C_D}$ denote the average RGB quality violation degree and the average depth geometric usability violation degree, respectively.
+
+Let $\epsilon_R^{\mathrm{eval}}$ and $\epsilon_D^{\mathrm{eval}}$ denote the allowable upper bounds on the average RGB quality violation and the average depth geometric usability violation, respectively. The final optimization problem is formulated as
+\begin{equation}
+\begin{aligned}
+\mathbf{P1:}\quad
+\max_{\left\{k_D[t],\beta_D[t]\right\}_{t=0}^{T-1}}
+\quad
+& J_{\mathrm{rec}}
+\\
+\mathrm{s.t.}\quad
+& J_{C_R}
+\le
+\epsilon_R^{\mathrm{eval}},
+\\
+& J_{C_D}
+\le
+\epsilon_D^{\mathrm{eval}},
+\\
+& k_D[t]
+\in
+\mathcal{K}_D,
+\quad
+\beta_D[t]
+\in
+\mathcal{P}_D,
+\\
+& t=0,1,\ldots,T-1.
+\end{aligned}
+\end{equation}
+
+Problem $\mathbf{P1}$ jointly optimizes slot-level subcarrier and power partitioning under bounded average task-quality violations, with the goal of improving the final three-dimensional reconstruction quality.
+
+\section{Methodology}
+\label{sec:methodology}
+
+RGB-D backhaul resource allocation is performed on a per-slot basis during the scanning process. The decision at each slot depends on the current link state, the depth data load, and the task progress, which makes the problem inherently sequential. In addition, the objective and constraints are defined by average quantities over the observation sequence, which leads to long-term constraints. To model this constrained sequential resource allocation process, we formulate the problem as a constrained Markov decision process (CMDP).
+
+\subsection{Constrained Markov Decision Process Formulation}
+
+In the CMDP formulation, one episode corresponds to a complete scanning sequence, and each time step corresponds to one communication slot. At slot $t$, the agent selects a resource allocation action $a[t]$ based on the current state $s[t]$. Given this action, the transmission model computes the received RGB quality $Q_{\mathrm{rgb}}[t]$, the partial success ratio of depth transmission $R_{\mathrm{dep}}[t]$, the surrogate reconstruction quality contribution $\hat{Q}_{\mathrm{rec}}[t]$, and the constraint costs $c_R[t]$ and $c_D[t]$. The RGB-D backhaul resource allocation process under a fixed trajectory is therefore defined as the following CMDP:
+\begin{equation}
+\mathcal{M}
+=
+\left(
+\mathcal{S},
+\mathcal{A},
+\mathcal{P},
+r,
+c_R,
+c_D,
+T
+\right),
+\end{equation}
+where $\mathcal{S}$ is the state space, $\mathcal{A}$ is the action space, $\mathcal{P}$ is the state transition probability, $r$ is the reward function associated with the surrogate reconstruction quality contribution, $c_R$ and $c_D$ are the constraint costs for RGB reception quality and depth geometric availability, respectively, and $T$ is the finite decision horizon given by the number of communication slots in the scanning sequence. Consistent with Section~\ref{sec:problem_formulation}, the objective and constraints are undiscounted finite-horizon averages. The discount factor $\gamma_{\mathrm{RL}}<1$ listed in Table~\ref{tab:rl_training_parameters} enters only the generalized advantage estimator during training as a standard variance-reduction device and is not part of the problem definition.
+
+At communication slot $t$, the state is defined as
+\begin{equation}
+s[t]
+=
+\left[
+\tilde{h}[t],
+\tilde{B}_{D}[t],
+\tilde{M}[t],
+\tilde{v}[t],
+\frac{t}{T}
+\right]
+\in \mathcal{S},
+\end{equation}
+where the components are defined as follows.
+$\tilde{h}[t]$ is the normalized action-independent link-quality descriptor: let $\gamma_{\mathrm{ref}}[t]$ denote the full-band reference SNR in dB obtained from the instantaneous link gain $h[t]$, including the current shadowing realization, when the total power $P_{\mathrm{tot}}$ is applied over the whole bandwidth $B$; then $\tilde{h}[t]=\operatorname{clip}\big((\gamma_{\mathrm{ref}}[t]-\gamma_{\mathrm{lo}})/(\gamma_{\mathrm{hi}}-\gamma_{\mathrm{lo}}),0,1\big)$, where $[\gamma_{\mathrm{lo}},\gamma_{\mathrm{hi}}]$ is the reference SNR range of the offline lookup grid.
+$\tilde{B}_{D}[t]$ is the depth data load $B_D[t]$ normalized by its reference range.
+$\tilde{M}[t]$ is the accumulated mapping progress, defined as the normalized running average of the realized per-slot surrogate qualities, $\tilde{M}[t]=\frac{1}{T}\sum_{\tau=0}^{t-1}\hat{Q}_{\mathrm{rec}}[\tau]$.
+$\tilde{v}[t]$ is the normalized view importance of the current RGB-D observation provided by the active-mapping planner.
+Finally, $t/T$ is the normalized temporal progress within the observation sequence.
+Accordingly, the CMDP state dimension is $d_s=5$.
+
+The state includes only an action-independent link-quality descriptor because the actual SNRs of the RGB and depth streams are determined after the subcarrier and power allocation action is selected.
+The remaining state variables describe the current depth transmission demand, accumulated reconstruction progress, view-level task importance, and sequence progress.
+These variables allow the policy to adapt RGB-D resource allocation according to both channel conditions and task relevance, without directly observing post-allocation SNRs that are consequences of the current action.
+It should be noted that $\tilde{M}[t]$ and $\tilde{v}[t]$ do not enter the reward or the constraint costs directly; they are auxiliary task-context features that let the policy condition its violation-budget spending on how much of the sequence has been completed and how the realized quality has accumulated so far.
+
+The action represents the resource allocation decision within each communication slot and is defined as
+\begin{equation}
+a[t]
+=
+\left(
+k_D[t],
+\beta_D[t]
+\right)
+\in
+\mathcal{A},
+\end{equation}
+where $k_D[t]$ is the number of data subcarriers allocated to the depth backhaul stream, and $\beta_D[t]$ is the fraction of the fixed total transmit power allocated to the depth backhaul stream. The remaining subcarrier and power resources are assigned to the RGB backhaul stream.
+
+After action $a[t]$ is executed, the system computes $Q_{\mathrm{rgb}}[t]$, $R_{\mathrm{dep}}[t]$, and $\hat{Q}_{\mathrm{rec}}[t]$ according to the current A2G link condition, the depth data load, and the selected resource allocation decision. The reward function is defined as
+\begin{equation}
+r[t]
+=
+\hat{Q}_{\mathrm{rec}}[t].
+\end{equation}
+The constraint costs follow the definitions in Section~IV:
+\begin{equation}
+c_R[t]
+=
+\max
+\left(
+Q_{\mathrm{thr}}-Q_{\mathrm{rgb}}[t],
+0
+\right),
+\end{equation}
+\begin{equation}
+c_D[t]
+=
+\max
+\left(
+R_{\mathrm{thr}}-R_{\mathrm{dep}}[t],
+0
+\right).
+\end{equation}
+
+The state transition probability $\mathcal{P}$ describes the evolution of the system state across communication slots. Since the UAV trajectory is fixed, the exogenous state components evolve independently of the action: $\tilde{h}[t+1]$ follows the trajectory geometry and the next shadowing realization, while $\tilde{B}_D[t+1]$ and $\tilde{v}[t+1]$ follow the captured observation sequence. The action does not change the physical trajectory of the UAV, but it does drive the endogenous component: the accumulated progress $\tilde{M}[t+1]$ depends on the realized surrogate quality $\hat{Q}_{\mathrm{rec}}[t]$ and hence on $a[t]$. More importantly, even with respect to the exogenous components, the problem does not decompose into independent per-slot subproblems, because the objective and both constraints are sequence-level averages: the admissible violation budget is shared across the whole sequence, and the value of spending part of this budget in the current slot depends on the channel states that the remaining slots will experience. Section~\ref{sec:performance_evaluation} quantifies this coupling with per-slot enumeration baselines: an unconstrained per-slot greedy oracle violates the long-term depth constraint even though it acts optimally slot by slot, whereas a per-slot Lagrangian oracle becomes feasible only after its multipliers are tuned offline against the sequence-level constraints.
+
+Let $\pi(a \mid s)$ denote the resource allocation policy of the agent, and let $\tau$ denote the complete state-action trajectory generated by policy $\pi$. The CMDP-based policy optimization problem is written as
+\begin{align}
+\max_{\pi}\quad
+J_{\mathrm{rec}}(\pi)
+&=
+\mathbb{E}_{\tau\sim\pi}
+\left[
+\frac{1}{T}
+\sum_{t=0}^{T-1}
+r[t]
+\right],
+\\
+\mathrm{s.t.}\quad
+J_{C_R}(\pi)
+&=
+\mathbb{E}_{\tau\sim\pi}
+\left[
+\frac{1}{T}
+\sum_{t=0}^{T-1}
+c_R[t]
+\right]
+\leq
+\epsilon_R^{\mathrm{eval}},
+\\
+J_{C_D}(\pi)
+&=
+\mathbb{E}_{\tau\sim\pi}
+\left[
+\frac{1}{T}
+\sum_{t=0}^{T-1}
+c_D[t]
+\right]
+\leq
+\epsilon_D^{\mathrm{eval}}.
+\end{align}
+This formulation converts the direct action-sequence optimization problem in Section~IV into a state-dependent policy learning problem. Thus, the agent can adaptively generate RGB-D resource allocation actions for each communication slot according to the current link state, depth data load, and task progress.
+
+\subsection{CRPO-Guided PPO Method}
+
+To solve the CMDP defined above, we adopt a CRPO-guided PPO method that incorporates the constraint-correction mechanism of CRPO into the PPO policy update framework. When the current policy satisfies the training-stage feasibility condition, the policy update aims to improve the surrogate reconstruction quality. When any constraint is violated, the policy update instead focuses on reducing the cost of the most severely violated constraint. The proposed method uses the PPO clipped surrogate objective to update the neural network policy. Therefore, it adopts the constraint-correction principle of CRPO, but it does not directly inherit the theoretical convergence guarantee of the original CRPO.
+
+Let $\theta$ denote the policy network parameters. If the policy network uses two action heads to generate $k_D[t]$ and $\beta_D[t]$, the joint policy is expressed as
+\begin{equation}
+\pi_{\theta}
+\left(
+a[t]\mid s[t]
+\right)
+=
+\pi_{\theta}^{k}
+\left(
+k_D[t]\mid s[t]
+\right)
+\pi_{\theta}^{\beta}
+\left(
+\beta_D[t]\mid s[t]
+\right).
+\end{equation}
+The log-probability of the joint action is then given by
+\begin{equation}
+\log
+\pi_{\theta}
+\left(
+a[t]\mid s[t]
+\right)
+=
+\log
+\pi_{\theta}^{k}
+\left(
+k_D[t]\mid s[t]
+\right)
++
+\log
+\pi_{\theta}^{\beta}
+\left(
+\beta_D[t]\mid s[t]
+\right).
+\end{equation}
+
+To estimate the main-objective return and the constraint-cost returns, the critic uses a shared state-encoding backbone followed by three separate value heads:
+\begin{equation}
+V_{\rm rec}(s[t]),\quad V_{C_R}(s[t]),\quad V_{C_D}(s[t]).
+\end{equation}
+Here, \(V_{\rm rec}(s[t])\) is the reward-value head for estimating the surrogate reconstruction return, while \(V_{C_R}(s[t])\) and \(V_{C_D}(s[t])\) are the constraint-value heads for estimating the RGB reception-quality violation return and the depth geometric-availability violation return, respectively.
+This shared-backbone multi-head critic allows the three value estimates to use a common state representation while maintaining separate outputs for the objective reward and the two constraint costs.
+
+Before each policy update, the system estimates the average constraint violation costs of the current policy from the rollout data. Let $\mathcal{B}$ denote the current rollout batch. The pair $(e,t)\in\mathcal{B}$ denotes the sample collected from the $e$-th parallel environment at communication slot $t$. Then,
+\begin{equation}
+\hat{J}_{C_R}
+=
+\frac{1}{|\mathcal{B}|}
+\sum_{(e,t)\in\mathcal{B}}
+c_R^{(e)}[t],
+\end{equation}
+\begin{equation}
+\hat{J}_{C_D}
+=
+\frac{1}{|\mathcal{B}|}
+\sum_{(e,t)\in\mathcal{B}}
+c_D^{(e)}[t].
+\end{equation}
+Here, $|\mathcal{B}|$ denotes the total number of samples in the current rollout batch, and $c_R^{(e)}[t]$ and $c_D^{(e)}[t]$ denote the RGB reception quality violation cost and the depth geometric availability violation cost of the $e$-th parallel environment at communication slot $t$, respectively.
+
+The thresholds $\epsilon_R^{\mathrm{eval}}$ and $\epsilon_D^{\mathrm{eval}}$ are the formal evaluation constraint thresholds in the CMDP. By contrast, $\delta_R$ and $\delta_D$ are used only for CRPO mode switching during training and do not modify the formal constraint definition of the CMDP. Setting $\delta_i<\epsilon_i^{\mathrm{eval}}$ triggers constraint correction earlier and yields more conservative policies. In this paper, we adopt the plain choice $\delta_i=\epsilon_i^{\mathrm{eval}}$, which already keeps the learned policies feasible on the test set, so the additional conservativeness margin is not exercised in the experiments.
+
+Based on the rollout-average costs, the set of violated constraints during training is defined as
+\begin{equation}
+\mathcal{V}
+=
+\left\{
+i\in\{R,D\}:
+\hat{J}_{C_i}>\delta_i
+\right\}.
+\end{equation}
+When $\mathcal{V}=\emptyset$, the current policy is treated as feasible under the training-stage trigger thresholds, and the policy update improves the surrogate reconstruction quality. Let $A_{\mathrm{rec}}[t]$ denote the advantage function computed from the main reward $r[t]=\hat{Q}_{\mathrm{rec}}[t]$. The PPO clipped surrogate objective is written as
+\begin{equation}
+\begin{aligned}
+L_{\mathrm{rec}}^{\mathrm{CLIP}}(\theta)
+&=
+\mathbb{E}_{t}
+\left[
+\min
+\left(
+\rho_t(\theta) A_{\mathrm{rec}}[t],
+\bar{\rho}_t(\theta) A_{\mathrm{rec}}[t]
+\right)
+\right], \\
+\bar{\rho}_t(\theta)
+&=
+\operatorname{clip}
+\left(
+\rho_t(\theta),
+1-\epsilon_{\mathrm{clip}},
+1+\epsilon_{\mathrm{clip}}
+\right).
+\end{aligned}
+\label{eq:ppo_rec_objective}
+\end{equation}
+
+When $\mathcal{V}\neq\emptyset$, the policy update enters the constraint-correction mode. We select the constraint with the largest normalized violation as
+\begin{equation}
+i^{\star}
+=
+\arg\max_{i\in\mathcal{V}}
+\frac{
+\hat{J}_{C_i}-\delta_i
+}{
+\delta_i+\eta
+},
+\end{equation}
+where $\eta$ is a small constant introduced to avoid division by zero. The temporary reward for the current update is then defined as the negative value of the corresponding constraint cost:
+\begin{equation}
+r_{\mathrm{CRPO}}[t]
+=
+-c_{i^{\star}}[t].
+\end{equation}
+Therefore, in the constraint-correction mode, maximizing the temporary reward is equivalent to reducing the most severe constraint violation. Let $A_C[t]$ denote the advantage function computed from $r_{\mathrm{CRPO}}[t]$. The corresponding PPO clipped surrogate objective is
+\begin{equation}
+\begin{aligned}
+L_C^{\mathrm{CLIP}}(\theta)
+&=
+\mathbb{E}_{t}
+\left[
+\min
+\left(
+\rho_t(\theta) A_C[t],
+\bar{\rho}_t(\theta) A_C[t]
+\right)
+\right], \\
+\bar{\rho}_t(\theta)
+&=
+\operatorname{clip}
+\left(
+\rho_t(\theta),
+1-\epsilon_{\mathrm{clip}},
+1+\epsilon_{\mathrm{clip}}
+\right).
+\end{aligned}
+\label{eq:ppo_constraint_objective}
+\end{equation}
+When all rollout-average costs are no larger than the training trigger thresholds, the policy update improves the surrogate reconstruction quality. When at least one constraint is violated, the policy update reduces the cost of the most severely violated constraint. This mechanism enables the agent to optimize the overall 3D reconstruction quality while adaptively correcting violations of RGB quality and depth geometric availability.
+
+\subsection{Baseline Methods}
+
+To evaluate the effectiveness of the proposed CRPO-guided PPO method, we compare it with both rule-based and learning-based baselines. 
+The rule-based baselines include fixed-balanced allocation, RGB-priority allocation, depth-priority allocation, and random allocation.
+The learning-based baselines include PPO-penalty and Lagrangian-PPO.
+In addition, two per-slot enumeration oracle baselines are constructed to isolate the value of sequence-level decision-making.
+For a fair comparison, all methods use the same UAV scanning trajectories, A2G channel model, action space, RGB-D quality normalization bounds, constraint settings, and reconstruction-aware surrogate function. 
+The system and communication parameters are listed in Table~\ref{tab:system_communication_parameters}, and the RL training parameters are listed in Table~\ref{tab:rl_training_parameters}. 
+Unless otherwise stated, the RL policy evaluation results are averaged over the random seeds specified in Table~\ref{tab:rl_training_parameters} and are presented as mean $\pm$ standard deviation.
+
+Fixed-balanced allocation uses a fixed subcarrier split and power ratio throughout the observation sequence. 
+It represents a static allocation strategy that does not explicitly favor either RGB or depth. 
+RGB-priority allocation assigns more communication resources to the RGB semantic JSCC stream to prioritize RGB reception quality. 
+Depth-priority allocation assigns more resources to the depth digital auxiliary stream to prioritize depth availability. 
+Random allocation uniformly samples the resource allocation action from the predefined action space. 
+These rule-based baselines are used to examine how different fixed or random allocation behaviors affect RGB-D reconstruction quality and constraint satisfaction.
+
+PPO-penalty uses the same environment, state space, action space, actor architecture, and PPO clipped surrogate objective as CRPO-guided PPO. 
+However, it does not explicitly separate main-objective optimization from constraint correction. 
+Instead, it incorporates the RGB reception-quality violation cost and the depth-availability violation cost into a single penalized reward:
+\begin{equation}
+r_{\mathrm{pen}}[t]
+=
+r[t]
+-
+\mu_R c_R[t]
+-
+\mu_D c_D[t],
+\end{equation}
+where $r[t]=\hat{Q}_{\mathrm{rec}}[t]$ denotes the per-slot reconstruction-quality proxy, and $\mu_R$ and $\mu_D$ denote the penalty weights for RGB and depth constraint violations, respectively. 
+In the experiments, we evaluate multiple penalty settings with $\mu_D=1.0$ and $\mu_R\in\{0.1,0.5,1.0,1.5,5.0\}$ to examine the sensitivity of PPO-penalty to manually selected penalty weights, where the two extreme values probe the under-penalization and over-penalization regimes. 
+The corresponding PPO objective is
+\begin{equation}
+\begin{aligned}
+L_{\mathrm{pen}}^{\mathrm{CLIP}}(\theta)
+&=
+\mathbb{E}_{t}
+\left[
+\min
+\left(
+\rho_t(\theta) A_{\mathrm{pen}}[t],
+\bar{\rho}_t(\theta) A_{\mathrm{pen}}[t]
+\right)
+\right],
+\\
+\bar{\rho}_t(\theta)
+&=
+\operatorname{clip}
+\left(
+\rho_t(\theta),
+1-\epsilon_{\mathrm{clip}},
+1+\epsilon_{\mathrm{clip}}
+\right).
+\end{aligned}
+\label{eq:ppo_penalty_objective}
+\end{equation}
+Here, $A_{\mathrm{pen}}[t]$ is the advantage function computed from $r_{\mathrm{pen}}[t]$, $\rho_t(\theta)$ is the probability ratio between the new and old policies, and $\bar{\rho}_t(\theta)$ is its clipped version. 
+Although PPO-penalty is simple to implement, its performance is sensitive to the manually selected penalty weights. 
+Small penalty weights may fail to suppress constraint violations, whereas large penalty weights may lead to overly conservative allocation behavior.
+
+Lagrangian-PPO dynamically adjusts the penalty strength by updating the Lagrange multipliers according to the observed constraint violations. 
+Its reward is defined as
+\begin{equation}
+r_{\mathrm{lag}}[t]
+=
+r[t]
+-
+\varpi_R c_R[t]
+-
+\varpi_D c_D[t],
+\end{equation}
+where $\varpi_R$ and $\varpi_D$ denote the Lagrange multipliers associated with the RGB reception-quality constraint and the depth-availability constraint, respectively. 
+During training, the multipliers are updated according to the rollout-average constraint costs:
+\begin{equation}
+\varpi_R
+\leftarrow
+\left[
+\varpi_R
++
+\alpha_{\varpi}
+\left(
+\hat{J}_{C_R}
+-
+\epsilon_R^{\mathrm{eval}}
+\right)
+\right]_+,
+\end{equation}
+\begin{equation}
+\varpi_D
+\leftarrow
+\left[
+\varpi_D
++
+\alpha_{\varpi}
+\left(
+\hat{J}_{C_D}
+-
+\epsilon_D^{\mathrm{eval}}
+\right)
+\right]_+,
+\end{equation}
+where $\alpha_{\varpi}$ denotes the multiplier update step size and $[\cdot]_+$ denotes non-negative projection. 
+Lagrangian-PPO can adaptively adjust the penalty strength, but its performance may still be affected by the multiplier update step size and the relative scales of rewards and costs.
+
+Finally, since the action space contains only $|\mathcal{K}_D|\times|\mathcal{P}_D|=28$ discrete allocations, we construct two per-slot enumeration baselines that exploit privileged information. At every slot, both baselines evaluate all $28$ candidate actions through the same transmission model as the environment, using the instantaneous link gain including the realized shadow fading and the resulting per-action received-quality outcomes, and then commit to the best-scoring action. The \emph{greedy oracle} maximizes the per-slot surrogate quality $\hat{Q}_{\mathrm{rec}}[t]$ and ignores the constraints. The \emph{per-slot Lagrangian oracle} maximizes $\hat{Q}_{\mathrm{rec}}[t]-\lambda_R c_R[t]-\lambda_D c_D[t]$ with fixed multipliers $(\lambda_R,\lambda_D)$ selected offline by grid search on the training trajectories, keeping the reward-maximizing pair among those whose training-set average costs satisfy both constraints. These baselines characterize how much of the problem can be solved by slot-wise optimization alone. They are reference bounds rather than deployable policies: a real transmitter cannot observe the received quality of every candidate allocation before transmitting the frame, and the multipliers must be re-tuned offline for every scene and constraint setting.
+
+In the evaluation stage, all methods execute the complete observation sequence and are compared from three aspects: reconstruction quality, resource allocation behavior, and constraint satisfaction. 
+Reconstruction quality is measured by the episode-average reconstruction-quality proxy, the episode return, and the final GSFusion-style 3D reconstruction metrics. 
+Resource allocation behavior is characterized by the selected depth subcarriers $k_D[t]$, the depth power ratio $\beta_D[t]$, the RGB reception quality $Q_{\mathrm{rgb}}[t]$, and the depth availability $R_{\mathrm{dep}}[t]$. 
+Constraint satisfaction is evaluated using the average constraint costs $J_{C_R}$ and $J_{C_D}$, together with their corresponding violation rates.
+\subsection{Complexity Analysis}
+
+This subsection analyzes the computational complexity of the proposed CRPO-guided PPO method. During training, the calibrated reconstruction-aware surrogate function is used for instant quality estimation, while the complete GSFusion-style reconstruction backend is not executed. Therefore, the main computational cost comes from environment interaction, actor-network updates, and critic-network updates.
+
+Let $N_{\mathrm{env}}$ denote the number of parallel environments and $T_{\mathrm{roll}}$ denote the sampling length of each rollout. The number of samples in one rollout batch is
+\begin{equation}
+|\mathcal{B}|
+=
+N_{\mathrm{env}}T_{\mathrm{roll}}.
+\end{equation}
+Let $C_{\mathrm{env}}$ denote the environment computation cost of one communication slot, which includes A2G channel evaluation, subcarrier-power allocation evaluation, RGB and depth quality estimation, surrogate reconstruction-quality computation, and constraint-cost computation. Let $C_A$ denote the per-sample training update cost of the actor network. Since the critic adopts a shared-backbone multi-head architecture, we use $C_V^{\mathrm{bb}}$ to denote the per-sample update cost of the shared critic backbone and $C_V^{\mathrm{head}}$ to denote the per-sample update cost of one value head. The critic has one reward-value head and two constraint-value heads, corresponding to $V_{\mathrm{rec}}(s[t])$, $V_{C_R}(s[t])$, and $V_{C_D}(s[t])$, respectively.
+
+For each rollout batch, the cost of environment interaction is
+\begin{equation}
+\mathcal{O}
+\left(
+|\mathcal{B}|C_{\mathrm{env}}
+\right).
+\end{equation}
+Before each policy update, the rollout-average constraint costs are computed to determine whether the update should optimize the reconstruction reward or correct the most severely violated constraint. This CRPO mode-selection step has complexity
+\begin{equation}
+\mathcal{O}
+\left(
+|\mathcal{B}|
+\right),
+\end{equation}
+which is small compared with neural network training.
+
+Let $K_{\mathrm{PPO}}$ denote the number of PPO update epochs performed on each rollout batch. Since each PPO epoch updates the actor network and the shared-backbone multi-head critic, the complexity of one training iteration is
+\begin{equation}
+\mathcal{O}
+\left(
+|\mathcal{B}|C_{\mathrm{env}}
++
+|\mathcal{B}|
++
+K_{\mathrm{PPO}}
+|\mathcal{B}|
+\left(
+C_A
++
+C_V^{\mathrm{bb}}
++
+3C_V^{\mathrm{head}}
+\right)
+\right).
+\end{equation}
+Equivalently, because the mode-selection cost $\mathcal{O}(|\mathcal{B}|)$ is dominated by the rollout simulation and neural network updates, the complexity can be written as
+\begin{equation}
+\mathcal{O}
+\left(
+|\mathcal{B}|C_{\mathrm{env}}
++
+K_{\mathrm{PPO}}
+|\mathcal{B}|
+\left(
+C_A
++
+C_V^{\mathrm{bb}}
++
+3C_V^{\mathrm{head}}
+\right)
+\right).
+\end{equation}
+
+Compared with PPO-penalty, which requires only the reward-value head, the proposed CRPO-guided PPO introduces two additional lightweight constraint-value heads on top of the shared critic backbone. Therefore, the additional critic-update cost mainly comes from the two constraint-value heads, namely
+\begin{equation}
+\mathcal{O}
+\left(
+2K_{\mathrm{PPO}}
+|\mathcal{B}|
+C_V^{\mathrm{head}}
+\right),
+\end{equation}
+together with the rollout-average constraint-cost computation and mode-selection cost $\mathcal{O}(|\mathcal{B}|)$. Since the value heads are lightweight compared with the shared backbone, this additional cost is limited in practice.
+
+In the online deployment stage, neither backpropagation nor PPO update is involved. At each communication slot, the system only performs one forward inference of the actor network to output the resource allocation action. Therefore, the online decision complexity of one communication slot is
+\begin{equation}
+\mathcal{O}
+\left(
+C_A^{\mathrm{fwd}}
+\right),
+\end{equation}
+where $C_A^{\mathrm{fwd}}$ denotes the complexity of one forward pass of the actor network. Since the actor is implemented as a lightweight MLP with two action heads for $k_D[t]$ and $\beta_D[t]$, the online inference cost is low and suitable for per-slot resource allocation.
+
+In summary, the computational burden of the proposed method is mainly concentrated in offline training. During online deployment, the system only needs to infer $k_D[t]$ and $\beta_D[t]$ from the current CMDP state, enabling real-time coordination between the RGB semantic JSCC stream and the depth digital auxiliary stream.
+
+\section{Performance Evaluation}
+\label{sec:performance_evaluation}
+\subsection{Experimental Setup}
+The experiments use the Eiffel scene from Macarons++~\cite{C5,C7}. The UAV scanning trajectories are generated by an active mapping method and remain identical across all methods. In total, 15 scanning trajectories of the scene are used: 10 trajectories for policy training and surrogate fitting, and 5 held-out trajectories for testing. Each trajectory contains 102 RGB-D observations, so with the slot length $\Delta t=0.5$~s one complete scan corresponds to a 51-second transmission window, matching the frame rate of the active mapping planner. In terms of decision latency, the learned policy requires a single forward pass of a lightweight MLP per slot, and the ERV fuses each received observation online, so the reconstructed map becomes available essentially at the end of the scan rather than after separate post-processing. To ensure a fair comparison, all methods use the same scanning trajectories, A2G channel model, shadow-fading random seeds, and reconstruction-aware surrogate function. Thus, the performance differences mainly result from the resource allocation strategies. All training and evaluation experiments are conducted on a local platform equipped with an Intel Core Ultra 7 265K CPU and an NVIDIA RTX 4070 Ti SUPER 16 GB GPU.
+
+The system and communication parameters are summarized in Table~\ref{tab:system_communication_parameters}. The reinforcement learning training parameters are summarized in Table~\ref{tab:rl_training_parameters}.
+
+\begin{table}[t]
+\centering
+\caption{System and Communication Parameters}
+\label{tab:system_communication_parameters}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.08}
+\begin{tabular}{@{}p{0.58\columnwidth}p{0.36\columnwidth}@{}}
+\hline
+Parameter & Value \\
+\hline
+Window duration, $\Delta t$ & $0.5$ s \\
+Carrier frequency, $f_c$ & $900$ MHz \\
+System bandwidth, $B$ & $1$ MHz \\
+OFDM data subcarriers, $K$ & $24$ \\
+Transmit power, $P_{\mathrm{tot}}$ & $20$ dBm \\
+Noise PSD, $N_0$ & $-174$ dBm/Hz \\
+Noise figure, $F_{\mathrm{dB}}$ & $7$ dB \\
+LoS parameters, $(a_{\mathrm{LoS}}, b_{\mathrm{LoS}})$ & $(9.61,0.16)$ \\
+LoS/NLoS additional losses, $(\eta_{\mathrm{LoS}},\eta_{\mathrm{NLoS}})$ & $(1,20)$ dB \\
+Shadowing standard deviation, $\sigma_{\xi}$ & $4$ dB \\
+OFDM symbol duration, $T_{\mathrm{sym}}$ & $40~\mu$s \\
+Communication-time ratio, $\alpha_c$ & $0.8$ \\
+MAC efficiency, $\eta_{\mathrm{MAC}}$ & $0.8$ \\
+MCS SNR thresholds, $\Gamma_m$ & $-1$, $1$, $4$, $8$, $10$, $14$, $17$, $19$, $24$, $28$, $30$ dB \\
+MCS parameters, $(\mu_m, r_m)$, 802.11ah MCS10, MCS0--9 & $(1,\frac14)$, $(1,\frac12)$, $(2,\frac12)$, $(2,\frac34)$, $(4,\frac12)$, $(4,\frac34)$, $(6,\frac23)$, $(6,\frac34)$, $(6,\frac56)$, $(8,\frac34)$, $(8,\frac56)$ \\
+RGB image resolution, $H\times W$ & $1024\times1824$ \\
+Depth payload & $256\times456$, $N_{\mathrm{tile}}=16$, lossless \\
+PSNR bounds, $(\mathrm{PSNR}_{\min},\mathrm{PSNR}_{\max})$
+& $(8.9171,22.5791)\,\mathrm{dB}$ \\
+Depth subcarrier set, $\mathcal{K}_D$ & $\{10,12,14,16,18,20,22\}$ \\
+Depth power-ratio set, $\mathcal{P}_D$ & $\{0.2,0.4,0.6,0.8\}$ \\
+RGB quality threshold, $Q_{\mathrm{thr}}$ & $0.70$ \\
+Depth availability threshold, $R_{\mathrm{thr}}$ & $0.35$ \\
+Constraint tolerance limits, $(\epsilon_R^{\mathrm{eval}},\epsilon_D^{\mathrm{eval}})$ & $(0.05,0.05)$ \\
+CRPO switching thresholds, $(\delta_R,\delta_D)$ & $(0.05,0.05)$ \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption{RL Training Parameters}
+\label{tab:rl_training_parameters}
+\begin{tabular}{l c}
+\hline
+Parameter & Value \\
+\hline
+Algorithm & CRPO-guided PPO \\
+State dimension, $d_s$ & $5$ \\
+Actor network & MLP $(5,128,128)$, two heads \\
+Value network & Shared critic backbone + three value heads \\
+Rollout length, $N_{\mathrm{roll}}$ & $2048$ \\
+Mini-batch size, $N_{\mathrm{batch}}$ & $64$ \\
+PPO epochs, $N_{\mathrm{epoch}}$ & $10$ \\
+Learning rate, $\eta_{\mathrm{lr}}$ & $3\times10^{-4}$ \\
+Discount factor, $\gamma_{\mathrm{RL}}$ & $0.99$ \\
+GAE parameter, $\lambda_{\mathrm{GAE}}$ & $0.95$ \\
+Clipping parameter, $\epsilon_{\mathrm{clip}}$ & $0.2$ \\
+Entropy coefficient, $c_{\mathrm{ent}}$ & $0.01$ \\
+Value-loss coefficient, $c_v$ & $0.5$ \\
+Gradient clipping & $0.5$ \\
+Training steps & $3.0\times10^{5}$ \\
+Random seed & $0,1,2,3,4$ \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Surrogate Model Validation}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{Figures/Fig3_surrogate_model_compare.pdf}
+\caption{Predicted versus measured GSFusion reconstruction quality of the linear and saturation surrogate models over the degradation conditions of the representative Eiffel trajectory.}
+\label{fig:surrogate_surface_comparison}
+\end{figure}
+
+This subsection validates the reconstruction-aware surrogate function introduced in Section~IV. During reinforcement learning training, this surrogate approximates the contribution of per-slot RGB-D reception quality to the final 3D reconstruction result. This design avoids repeated calls to the complete GSFusion-style RGB-D reconstruction backend during training. The surrogate output is given by
+\begin{equation}
+\hat{Q}_{\mathrm{rec}}[t]
+=
+\kappa_{\rm sur}
+\left(
+Q_{\mathrm{rgb}}[t],
+R_{\mathrm{dep}}[t]
+\right).
+\end{equation}
+
+To construct the offline calibration data, we generate RGB-D sequences under different degradation conditions according to the communication lookup table. For each of the 15 scanning trajectories, 77 degradation conditions are generated, where each condition corresponds to a specific channel SNR and depth subcarrier allocation. For each condition, the RGB stream is reconstructed by the trained RGB semantic JSCC model, while the depth stream is degraded according to the corresponding partial success ratio $R_{\mathrm{dep}}$. The degraded RGB-D sequence is then fed into the GSFusion-style reconstruction backend to obtain the measured 3D reconstruction metrics. A surrogate is calibrated independently for each trajectory on 54 of its conditions and validated on the remaining 23 held-out conditions. The same per-trajectory surrogates are used for policy training and for the surrogate-level evaluation of all methods, so no method receives a preferential reward definition.
+
+The ground-truth reconstruction quality is measured from both rendering and geometric perspectives. Rendering quality is evaluated by PSNR, SSIM, and LPIPS, while geometric quality is evaluated by Chamfer distance, F-score, and completeness. Since these metrics have different numerical ranges and monotonic directions, we normalize them to the range $[0,1]$ and reverse the directions of lower-is-better metrics, such as LPIPS and Chamfer distance. As a result, all normalized metrics are positively correlated with the reconstruction quality.
+
+Let $\bar{Q}_{\mathrm{psnr}}$, $\bar{Q}_{\mathrm{ssim}}$, $\bar{Q}_{\mathrm{lpips}}$, $\bar{Q}_{\mathrm{fscore}}$, $\bar{Q}_{\mathrm{comp}}$, and $\bar{Q}_{\mathrm{chamfer}}$ denote the normalized PSNR, SSIM, converted LPIPS, F-score, completeness, and converted Chamfer distance, respectively. Based on these normalized metrics, the rendering-quality label and the geometric-quality label are defined as
+\begin{equation}
+Q_{\mathrm{app}}
+=
+\bar{Q}_{\mathrm{psnr}},
+\end{equation}
+\begin{equation}
+Q_{\mathrm{geo}}
+=
+0.35\bar{Q}_{\mathrm{fscore}}
++
+0.35\bar{Q}_{\mathrm{comp}}
++
+0.30\bar{Q}_{\mathrm{chamfer}}.
+\end{equation}
+In this final surrogate calibration, the appearance label is instantiated by the normalized PSNR term, while SSIM and LPIPS are retained as final 3D mapping quality metrics in the reconstruction comparison. The scalar ground-truth 3D reconstruction quality label used for surrogate fitting is further defined as
+\begin{equation}
+Q_{\mathrm{gt}}
+=
+\operatorname{clip}
+\left(
+0.45Q_{\mathrm{app}}
++
+0.45Q_{\mathrm{geo}}
++
+0.10Q_{\mathrm{app}}Q_{\mathrm{geo}},
+0,
+1
+\right).
+\end{equation}
+Here, $Q_{\mathrm{app}}$ represents the appearance rendering quality, and $Q_{\mathrm{geo}}$ represents the geometric reconstruction quality. The product term captures the coupling between RGB appearance information and depth geometric information. It should be noted that $Q_{\mathrm{gt}}$ is used only for offline surrogate fitting and validation, rather than as an online reinforcement learning input. The surrogate function takes only $Q_{\mathrm{rgb}}$ and $R_{\mathrm{dep}}$ as inputs to avoid reward leakage through action-related variables.
+
+To validate the surrogate form, we compare a linear surrogate model with a saturation surrogate model. The linear surrogate model is defined as
+\begin{equation}
+\begin{aligned}
+K_{\mathrm{lin}}
+\left(
+Q_{\mathrm{rgb}},
+R_{\mathrm{dep}}
+\right)
+=
+\operatorname{clip}
+\Big(
+&\tilde{b}
++
+\tilde{w}_{r}Q_{\mathrm{rgb}}
++
+\tilde{w}_{d}R_{\mathrm{dep}}
+\\
+&+
+\tilde{w}_{j}Q_{\mathrm{rgb}}R_{\mathrm{dep}},
+0,
+1
+\Big).
+\end{aligned}
+\label{eq:linear_surrogate}
+\end{equation}
+where $\tilde{b}$ is the bias term of the linear model, and $\tilde{w}_{r}$, $\tilde{w}_{d}$, and $\tilde{w}_{j}$ denote the linear weights of RGB reception quality, depth transmission completeness, and the RGB-depth joint term, respectively.
+
+The saturation surrogate model follows the diminishing-return form defined in Section~IV. Both models are fitted by least squares on the same offline samples and are validated on held-out conditions. Fig.~\ref{fig:surrogate_surface_comparison} plots the quality predicted by each surrogate model against the measured GSFusion reconstruction quality over the degradation conditions of the representative trajectory, while the quantitative held-out validation is reported in Table~\ref{tab:surrogate_validation_results}. The predictions of the linear surrogate model deviate systematically in the high-quality region, because a linear form cannot capture the reduced marginal reconstruction gain there. In contrast, the saturation surrogate model tracks the measured quality closely over the whole range, since its response flattens as RGB and depth quality improve. This behavior is more consistent with RGB-D reconstruction, where quality improvement in low-quality regions brings larger gains, while high-quality regions exhibit diminishing marginal gains. The candidate saturation form also includes an RGB-depth joint term whose fitted magnitude varies across trajectories, as discussed below.
+
+Table~\ref{tab:surrogate_validation_results} reports the held-out surrogate validation results for a representative Eiffel trajectory, selected among the 15 trajectories by the highest fitting $R^2$. We use RMSE, MAE, $R^2$, and Spearman $\rho$ to evaluate the fitting quality. Lower RMSE and MAE indicate better fitting accuracy, while higher $R^2$ and Spearman $\rho$ indicate better explanatory power and rank consistency. Compared with the linear surrogate model, the saturation surrogate model achieves lower RMSE and MAE, as well as higher $R^2$ and Spearman $\rho$. The same qualitative conclusion holds for all 15 trajectories: across the per-trajectory calibrations, the saturation form attains fitting $R^2$ between $0.85$ and $0.94$ with RMSE between $0.06$ and $0.11$. These results show that the saturation surrogate model fits the real GSFusion reconstruction quality accurately and preserves the quality ranking among different degradation conditions.
+
+\begin{table}[t]
+\centering
+\caption{Surrogate Model Validation Results (Representative Trajectory, 23 Held-Out Conditions)}
+\label{tab:surrogate_validation_results}
+\begin{tabular}{l c c c c c}
+\hline
+Model & Samples & RMSE & MAE & $R^2$ & $\rho$ \\
+\hline
+Linear surrogate & $23$ & $0.1350$ & $0.1022$ & $0.7295$ & $0.9051$ \\
+Saturation surrogate & $23$ & $0.0793$ & $0.0399$ & $0.9066$ & $0.9792$ \\
+\hline
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:saturation_surrogate_parameters} reports the fitted parameters for the representative trajectory. Two caveats apply when interpreting these weights. First, they act on normalized and saturated features, so their magnitudes reflect sensitivity over the entire degradation range covered by the calibration conditions, which includes near-total depth loss; they do not imply equally large marginal geometry gains in the moderate depth-availability regime that the learned policies actually operate in (see Section~\ref{sec:performance_evaluation}-D). In particular, the large depth weight primarily encodes that severe depth starvation collapses the reconstruction, which is consistent with the role of the depth constraint as a usability floor. Second, the individual weight values are trajectory-specific and should not be over-interpreted: across the 15 per-trajectory calibrations, several trajectories assign the RGB contribution to the joint term rather than to the separate RGB term (fitted $w_r=0$ with $w_j>0$), whereas the representative trajectory yields $w_j=0$ with separate RGB and depth terms. What is stable across all calibrations is the qualitative structure, namely positive saturating contributions of both modalities with diminishing returns, rather than the specific weight partition. Accordingly, these parameters are treated as scene- and trajectory-specific calibration outputs, not as transferable conclusions about modality importance.
+
+\begin{table}[t]
+\centering
+\caption{Fitted Parameters of the Saturation Surrogate Model (Representative Trajectory)}
+\label{tab:saturation_surrogate_parameters}
+\begin{tabular}{l l c}
+\hline
+Parameter & Meaning & Value \\
+\hline
+$b$ & Model bias & $-1.2057$ \\
+$w_r$ & RGB saturation weight & $1.1218$ \\
+$w_d$ & Depth saturation weight & $1.3889$ \\
+$w_j$ & Joint saturation weight & $0.0000$ \\
+$\lambda_r$ & RGB saturation rate & $6$ \\
+$\lambda_d$ & Depth saturation rate & $6$ \\
+\hline
+\end{tabular}
+\end{table}
+
+In summary, the per-trajectory calibrated saturation surrogates effectively capture the effects of $Q_{\mathrm{rgb}}$ and $R_{\mathrm{dep}}$ on 3D reconstruction quality across the Eiffel scanning trajectories. Therefore, the subsequent reinforcement learning training uses these calibrated surrogates as a lightweight approximation of the per-slot reconstruction reward.
+
+\subsection{Training Convergence and Constraint Satisfaction}
+
+\begin{figure*}[t]
+\centering
+
+\subfloat[Surrogate reconstruction quality.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig4a_eiffel_training_reward_curve.pdf}
+\label{fig4a:eiffel_training_reward_curve}
+}
+\hfill
+\subfloat[RGB constraint cost.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig4b_eiffel_training_rgb_constraint_costs.pdf}
+\label{fig4b:eiffel_training_rgb_constraint_costs}
+}
+\hfill
+\subfloat[Depth constraint cost.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig4c_eiffel_training_depth_constraint_costs.pdf}
+\label{fig4c:eiffel_training_depth_constraint_costs}
+}
+
+\vspace{0.6em}
+
+\subfloat[RGB reception quality.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig4d_eiffel_training_qrgb_curve.pdf}
+\label{fig4d:eiffel_training_qrgb_curve}
+}
+\hfill
+\subfloat[Depth availability.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig4e_eiffel_training_rdepth_curve.pdf}
+\label{fig4e:eiffel_training_rdepth_curve}
+}
+\hfill
+\subfloat[Policy entropy.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig4f_eiffel_policy_entropy_curve.pdf}
+\label{fig4f:eiffel_policy_entropy_curve}
+}
+
+\caption{Training convergence and constraint satisfaction of learning-based resource allocation methods.}
+\label{fig4:training_convergence_constraint_satisfaction}
+\end{figure*}
+
+This subsection analyzes the training convergence and long-term constraint satisfaction of CRPO-guided PPO. The constraint thresholds for RGB reception quality and depth availability are set to $Q_{\mathrm{thr}}=0.70$ and $R_{\mathrm{thr}}=0.35$, respectively. The constraint tolerance limits are set to $\epsilon_R=\epsilon_D=0.05$. All training curves are plotted based on rollout-level average statistics.
+
+Fig.~\ref{fig4a:eiffel_training_reward_curve} shows that the average surrogate reconstruction quality of CRPO-guided PPO increases during training and remains stable in the later stage. Over the last 20 training updates, CRPO-guided PPO achieves an average surrogate reconstruction quality of $0.8428\pm0.0058$. Lagrangian-PPO and PPO-penalty achieve comparable final rewards, but the gap is small. The main advantage of CRPO-guided PPO is not reward maximization alone, but the ability to improve reconstruction quality while keeping constraint costs under control.
+
+Fig.~\ref{fig4b:eiffel_training_rgb_constraint_costs} shows that CRPO-guided PPO effectively reduces the RGB constraint violation cost. Over the last 20 training updates, CRPO-guided PPO obtains $J_{C_R}=0.0446\pm0.0024$, which is below the tolerance limit of $0.05$. Lagrangian-PPO still has a relatively high RGB constraint cost, with $J_{C_R}=0.1149\pm0.0273$. This indicates that its control of the RGB constraint is less stable than that of CRPO-guided PPO. PPO-penalty is sensitive to the penalty weights. Increasing the RGB penalty reduces the RGB cost, but it also lowers the depth transmission completeness and increases the depth-side cost.
+
+Fig.~\ref{fig4c:eiffel_training_depth_constraint_costs} shows that CRPO-guided PPO also controls the depth constraint violation cost. Over the last 20 training updates, CRPO-guided PPO obtains $J_{C_D}=0.0371\pm0.0012$, which is also below $0.05$. This result indicates that CRPO-guided PPO can switch the correction direction between RGB and depth constraints, rather than optimizing only one constraint.
+
+The penalty-weight sensitivity of PPO-penalty is quantified in Table~\ref{tab:penalty_weight_sensitivity}, which sweeps $\mu_R$ over $\{0.1,0.5,1.0,1.5,5.0\}$ with $\mu_D=1.0$ under the full evaluation protocol. The sweep exposes failures on both ends. With $\mu_R=0.1$, the penalty is too weak to protect the RGB constraint: the policy trades RGB quality for reward and violates the RGB constraint by more than twice the tolerance ($J_{C_R}=0.1182\pm0.0207$). With $\mu_R=5.0$, the penalty over-prioritizes RGB: resources shift away from the depth stream and the depth constraint is violated instead ($J_{C_D}=0.0549\pm0.0105$). Only the intermediate window $\mu_R\in[0.5,1.5]$ yields feasible policies, and locating this window requires repeated training runs with different weights. In contrast, CRPO-guided PPO derives its correction signal directly from the measured constraint violations and reaches a feasible policy without any weight search.
+
+\begin{table}[t]
+\centering
+\caption{Penalty-Weight Sensitivity of PPO-Penalty on the Eiffel Test Set ($\mu_D=1.0$; Mean $\pm$ Std over Five Training Seeds $\times$ Five Channel Seeds)}
+\label{tab:penalty_weight_sensitivity}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.08}
+\begin{tabular}{c c c c l}
+\hline
+$\mu_R$ & $\bar{Q}_{\mathrm{rec}}$ $\uparrow$ & $J_{C_R}$ $\downarrow$ & $J_{C_D}$ $\downarrow$ & Feasible \\
+\hline
+$0.1$ & $0.954{\pm}0.025$ & $0.118{\pm}0.021$ & $0.037{\pm}0.006$ & No (RGB) \\
+$0.5$ & $0.932{\pm}0.028$ & $0.034{\pm}0.012$ & $0.042{\pm}0.008$ & Yes \\
+$1.0$ & $0.927{\pm}0.029$ & $0.021{\pm}0.012$ & $0.046{\pm}0.009$ & Yes \\
+$1.5$ & $0.933{\pm}0.032$ & $0.016{\pm}0.009$ & $0.047{\pm}0.009$ & Yes \\
+$5.0$ & $0.941{\pm}0.036$ & $0.007{\pm}0.009$ & $0.055{\pm}0.011$ & No (depth) \\
+\hline
+\end{tabular}
+\end{table}
+
+Fig.~\ref{fig4d:eiffel_training_qrgb_curve} and Fig.~\ref{fig4e:eiffel_training_rdepth_curve} further show the evolution of the quality variables. For CRPO-guided PPO, the last-20-update averages are $Q_{\mathrm{rgb}}=0.7229\pm0.0132$ and $R_{\mathrm{dep}}=0.5393\pm0.0055$, which are higher than $Q_{\mathrm{thr}}$ and $R_{\mathrm{thr}}$, respectively. It is important to note that an average quality above the threshold does not imply a zero constraint cost, because the constraint cost is defined as the average per-slot shortage. Even when the average $R_{\mathrm{dep}}$ is higher than $0.35$, slots with poor channel quality can still incur a depth constraint cost. Therefore, constraint satisfaction should be assessed by $J_{C_R}$ and $J_{C_D}$, rather than by the average $Q_{\mathrm{rgb}}$ and average $R_{\mathrm{dep}}$ alone.
+
+Fig.~\ref{fig4f:eiffel_policy_entropy_curve} shows that the policy entropy of CRPO-guided PPO decreases during training, indicating that the policy gradually shifts from early exploration to more concentrated action selection. Over the last 20 training updates, its entropy is $1.2486\pm0.2893$. The other PPO-based methods show similar decreasing trends, and no persistent random exploration or policy collapse is observed during training. The entropy of CRPO-guided PPO decreases at a moderate rate, which reflects stable policy updates between constraint correction and reward optimization.
+
+The test results are consistent with the above training dynamics. CRPO-guided PPO achieves RGB and depth constraint costs of $0.0329\pm0.0171$ and $0.0432\pm0.0077$, respectively, both of which are below the tolerance limit of $0.05$. Therefore, the learned policy is feasible overall. Its RGB constraint cost is much lower than that of Lagrangian-PPO, which obtains $J_{C_R}=0.0907\pm0.0476$. In contrast, the fixed rule-based baselines show clear one-sided biases. RGB-priority allocation almost eliminates RGB violation, but its depth cost reaches $0.1733\pm0.0170$. Depth-priority allocation reduces the depth cost to $0.0291\pm0.0049$, but its RGB cost reaches $0.4420\pm0.0278$. Fixed-balanced allocation and random allocation cannot satisfy both types of constraints simultaneously.
+
+Overall, the training curves and test results show that CRPO-guided PPO improves surrogate reconstruction quality while satisfying both RGB and depth long-term constraints. Compared with fixed rule-based policies, it avoids one-sided resource bias. Compared with PPO-penalty, it does not depend on locating the feasible penalty-weight window ($\mu_R\in[0.5,1.5]$ in this setting, with constraint violations on both sides of the window) by trial and error. Compared with Lagrangian-PPO, it provides more direct correction for the RGB constraint. Therefore, CRPO-guided PPO is more suitable for the reconstruction-aware RGB-D resource allocation problem considered in this paper.
+
+\subsection{3D Mapping Quality Comparison}
+
+\begin{figure*}[t]
+\centering
+\subfloat[Comprehensive reconstruction quality.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig5a_quality_q_gt.pdf}
+\label{fig5a:quality_q_gt}
+}
+\hfil
+\subfloat[Comprehensive appearance quality.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig5b_quality_q_app.pdf}
+\label{fig5b:quality_q_app}
+}
+\hfil
+\subfloat[Comprehensive geometric quality.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig5c_quality_q_geo.pdf}
+\label{fig5c:quality_q_geo}
+}
+\caption{Comparison of overall reconstruction quality, appearance quality, and geometric quality.}
+\label{fig5:quality_comparison}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+\subfloat[PSNR.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig6a_metric_psnr.pdf}
+\label{fig6a:metric_psnr}
+}
+\hfil
+\subfloat[SSIM.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig6b_metric_ssim.pdf}
+\label{fig6b:metric_ssim}
+}
+\hfil
+\subfloat[LPIPS.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig6c_metric_lpips.pdf}
+\label{fig6c:metric_lpips}
+}
+
+\subfloat[Chamfer distance.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig6d_metric_chamfer.pdf}
+\label{fig6d:metric_chamfer}
+}
+\hfil
+\subfloat[F-score.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig6e_metric_fscore.pdf}
+\label{fig6e:metric_fscore}
+}
+\hfil
+\subfloat[Completeness.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig6f_metric_completeness.pdf}
+\label{fig6f:metric_completeness}
+}
+\caption{Comparison of rendering quality and geometric reconstruction quality.}
+\label{fig6:metric_comparison}
+\end{figure*}
+
+This subsection evaluates the impact of different resource allocation strategies on the final 3D mapping quality by using the full GSFusion backend. Unlike the online evaluation that relies only on the surrogate function, all results in this subsection are computed directly from the final reconstruction outputs. Since full GSFusion reconstruction is computationally expensive, this section reconstructs each of the five held-out Eiffel trajectories once per method using the exported policy sequences, and reports the mean and standard deviation over the five trajectories. Because the reconstruction difficulty differs substantially across trajectories, the cross-trajectory standard deviations are large for all methods; method comparisons are therefore based on trajectory-paired statistics, i.e., differences between methods on the same trajectory under the same channel realization, in addition to the aggregate means. The evaluation includes rendering quality metrics, namely PSNR, SSIM, and LPIPS, and geometric metrics measured with respect to the aligned ground-truth mesh, namely Chamfer distance, F-score, and completeness. The composite scores $Q_{\mathrm{app}}$, $Q_{\mathrm{geo}}$, and $Q_{\mathrm{gt}}$ are reported for completeness, but since $Q_{\mathrm{gt}}$ follows the label definition used for surrogate calibration, the method comparison in this subsection is based on the six standard metrics, and $Q_{\mathrm{gt}}$ is accompanied by a weight-sensitivity check. For this comparison, each raw metric is normalized by its 5th and 95th percentiles over all method-trajectory results, with lower-is-better metrics reversed; the resulting normalization spans are $[8.11, 14.26]$~dB for PSNR, $[0.047, 0.572]$ for SSIM, $[0.305, 0.640]$ for LPIPS, $[1.52, 3.58]$ for Chamfer distance, $[0.480, 0.644]$ for F-score, and $[0.317, 0.477]$ for completeness. The composite appearance score aggregates the three rendering metrics as $Q_{\mathrm{app}}=0.6\bar{Q}_{\mathrm{psnr}}+0.2\bar{Q}_{\mathrm{ssim}}+0.2\bar{Q}_{\mathrm{lpips}}$, whereas the surrogate calibration in Section~\ref{sec:performance_evaluation}-B instantiated the appearance label by the PSNR term alone. Table~\ref{tab:main_3d_mapping_quality_comparison} reports the complete quantitative results of different methods.
+
+\begin{table*}[t]
+\centering
+\caption{3D Mapping Quality Comparison Based on Real GSFusion Reconstruction (Mean $\pm$ Standard Deviation over Five Held-Out Trajectories)}
+\label{tab:main_3d_mapping_quality_comparison}
+\footnotesize
+\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{l c c c c c c c c c}
+\hline
+Method & PSNR $\uparrow$ & SSIM $\uparrow$ & LPIPS $\downarrow$ & Chamfer $\downarrow$ & F-score $\uparrow$ & Compl. $\uparrow$ & $Q_{\mathrm{app}}$ $\uparrow$ & $Q_{\mathrm{geo}}$ $\uparrow$ & $Q_{\mathrm{gt}}$ $\uparrow$ \\
+\hline
+Fixed-balanced & $10.77{\pm}1.41$ & $0.288{\pm}0.056$ & $0.492{\pm}0.055$ & $2.680{\pm}0.869$ & $0.552{\pm}0.076$ & $0.385{\pm}0.076$ & $0.439{\pm}0.191$ & $0.407{\pm}0.403$ & $0.404{\pm}0.285$ \\
+RGB-priority & $8.55{\pm}1.05$ & $0.064{\pm}0.037$ & $0.630{\pm}0.037$ & $2.706{\pm}0.854$ & $0.532{\pm}0.057$ & $0.365{\pm}0.053$ & $0.089{\pm}0.092$ & $0.359{\pm}0.343$ & $0.207{\pm}0.200$ \\
+Depth-priority & $9.87{\pm}1.14$ & $0.136{\pm}0.051$ & $0.575{\pm}0.050$ & $2.674{\pm}0.858$ & $0.545{\pm}0.061$ & $0.378{\pm}0.059$ & $0.244{\pm}0.156$ & $0.404{\pm}0.384$ & $0.306{\pm}0.256$ \\
+Random & $10.88{\pm}1.35$ & $0.294{\pm}0.085$ & $0.485{\pm}0.065$ & $2.685{\pm}0.845$ & $0.543{\pm}0.060$ & $0.375{\pm}0.057$ & $0.457{\pm}0.195$ & $0.392{\pm}0.376$ & $0.404{\pm}0.253$ \\
+PPO-penalty & $12.64{\pm}1.83$ & $0.476{\pm}0.100$ & $0.374{\pm}0.081$ & $2.694{\pm}0.830$ & $0.542{\pm}0.056$ & $0.374{\pm}0.054$ & $0.763{\pm}0.264$ & $0.388{\pm}0.359$ & $0.555{\pm}0.311$ \\
+Lagrangian-PPO & $12.67{\pm}1.68$ & $0.483{\pm}0.085$ & $0.370{\pm}0.071$ & $2.686{\pm}0.859$ & $0.542{\pm}0.060$ & $0.375{\pm}0.057$ & $0.771{\pm}0.239$ & $0.392{\pm}0.375$ & $0.561{\pm}0.308$ \\
+CRPO-guided PPO & $12.84{\pm}1.78$ & $0.492{\pm}0.091$ & $0.364{\pm}0.075$ & $2.674{\pm}0.873$ & $0.552{\pm}0.076$ & $0.385{\pm}0.076$ & $0.787{\pm}0.243$ & $0.411{\pm}0.406$ & $0.578{\pm}0.324$ \\
+\hline
+\end{tabular}
+\end{table*}
+
+As shown in Table~\ref{tab:main_3d_mapping_quality_comparison} and Fig.~\ref{fig6a:metric_psnr}--Fig.~\ref{fig6c:metric_lpips}, the clearest and most robust differences appear on the appearance side. The three learning-based methods improve rendering quality substantially over all rule-based baselines (about $+2$~dB PSNR over the best fixed rule). Among the learning-based methods, CRPO-guided PPO achieves the best mean PSNR ($12.84$~dB), SSIM ($0.492$), and LPIPS ($0.364$). More importantly, the advantage over Lagrangian-PPO is consistent at the trajectory level: CRPO-guided PPO obtains better PSNR, SSIM, and LPIPS on all five held-out trajectories (paired $t$-test $p\approx0.02$ for each of the three metrics; the exact Wilcoxon signed-rank test attains its minimum two-sided value $p=0.0625$ at $n=5$). Compared with PPO-penalty, CRPO-guided PPO is better on four of the five trajectories for the appearance metrics, but the paired differences do not reach significance at this sample size. The appearance-side gain of CRPO-guided PPO over Lagrangian-PPO is directly explained by constraint behavior: Lagrangian-PPO violates the RGB constraint on the test set ($J_{C_R}=0.0907$, Table~\ref{tab:eiffel_resource_allocation_behavior}), and its degraded RGB reception quality propagates to the rendered reconstruction.
+
+The geometric metrics in Fig.~\ref{fig6d:metric_chamfer}--Fig.~\ref{fig6f:metric_completeness} tell a different and more nuanced story, which we report explicitly. Among the three learning-based methods, the Chamfer distance, F-score, and completeness differences are small relative to the paired variability and are not statistically distinguishable (e.g., CRPO-guided PPO improves Chamfer over Lagrangian-PPO on four of five trajectories, paired $t$-test $p=0.25$). The reason is that GSFusion aggregates depth observations from many overlapping views into the TSDF grid, so partial per-frame depth delivery is largely compensated as long as depth availability stays above a moderate level: raising the average depth availability from $0.21$ (RGB-priority) to $0.58$ (depth-priority) improves the mean Chamfer distance by only $0.033$ ($\approx1.2\%$) and completeness by $0.013$. In this scene, final reconstruction quality is therefore dominated by RGB appearance in the operating regime of the learned policies, and the role of the depth constraint is to act as a usability floor that prevents the severe depth starvation of RGB-priority-style allocation, rather than to yield incremental geometry gains. This observation is consistent with the interpretation of the surrogate weights in Section~\ref{sec:performance_evaluation}-B.
+
+Regarding the composite scores, visualized in Fig.~\ref{fig5a:quality_q_gt}--Fig.~\ref{fig5c:quality_q_geo}, CRPO-guided PPO attains the best $Q_{\mathrm{gt}}=0.578$, followed by Lagrangian-PPO ($0.561$) and PPO-penalty ($0.555$). Since the weights $(0.45, 0.45, 0.10)$ in the definition of $Q_{\mathrm{gt}}$ are a design choice, we verified the robustness of this ranking by recomputing $Q_{\mathrm{gt}}$ under alternative weightings, varying the appearance/geometry weights from $(0.25, 0.65)$ to $(0.65, 0.25)$ and removing the product term entirely. The ordering of the three learning-based methods, CRPO-guided PPO $>$ Lagrangian-PPO $>$ PPO-penalty, and the separation of all learning-based methods from all rule-based baselines are unchanged under every tested weighting. The composite score is thus used only as a summary; none of the conclusions of this subsection depend on its specific weights.
+
+It is also worth noting that the absolute PSNR values are low in absolute terms (the best method reaches $12.84$~dB against the clean reference). This reflects the severity of the considered regime rather than a defect of a particular method: a $1$-MHz link with $24$ data subcarriers must carry $1024\times1824$ RGB-D observations at two frames per second, i.e., less than $0.08$ channel uses per RGB pixel even under the most RGB-favorable allocation. All methods are compared under this common budget, and the reported differences should be read as relative performance under heavy band limitation; the architecture ablation in Section~\ref{sec:oracle_ablation} shows that conventional digital transmission delivers no usable RGB at all in most of this operating range.
+
+The rule-based baselines exhibit clear one-sided optimization behavior. RGB-priority allocation favors RGB transmission, but insufficient depth information leads to the highest Chamfer distance of $2.7064$ and relatively low F-score and completeness, resulting in a final $Q_{\mathrm{gt}}$ of only $0.2072$. Depth-priority allocation provides relatively good geometric quality, with $Q_{\mathrm{geo}}=0.4036$, but its appearance quality is clearly insufficient, with $Q_{\mathrm{app}}=0.2443$. Therefore, its overall reconstruction quality remains limited. Fixed-balanced allocation and Random allocation achieve similar $Q_{\mathrm{gt}}$ values of $0.4041$ and $0.4037$, respectively, but both methods lack the ability to adapt to channel states and task constraints.
+
+The qualitative reconstruction results are presented through the rendered views of different methods under the same test viewpoint, as shown in Fig.~\ref{fig7:qualitative_3d_mapping}. The figure includes the reference view, CRPO-guided PPO, Lagrangian-PPO, PPO-penalty, Random allocation, and Depth-priority allocation. Compared with the rule-based baselines, CRPO-guided PPO preserves more continuous scene structures and more stable appearance details. It also reduces the geometric incompleteness caused by insufficient depth transmission and alleviates the texture degradation caused by degraded RGB reconstruction quality. These qualitative observations are consistent with the quantitative results in Table~\ref{tab:main_3d_mapping_quality_comparison}, Fig.~\ref{fig5a:quality_q_gt}, Fig.~\ref{fig5b:quality_q_app}, and Fig.~\ref{fig5c:quality_q_geo}. This consistency further shows that CRPO-guided PPO forms a more effective reconstruction-aware balance between RGB appearance transmission and depth geometric transmission.
+
+In summary, the real GSFusion reconstruction results support three conclusions. First, learning-based constrained allocation improves final rendering quality substantially and consistently over rule-based allocation. Second, among the learning-based methods, CRPO-guided PPO delivers a trajectory-consistent appearance advantage over Lagrangian-PPO, which stems from its more reliable satisfaction of the RGB constraint, while its geometric quality is statistically on par with the other learning-based methods and clearly protected against the depth-starvation failure mode of RGB-priority allocation. Third, these conclusions hold on the six standard metrics directly and are insensitive to the weighting of the composite score.
+
+\begin{figure*}[t]
+\centering
+\subfloat[CRPO-guided PPO.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig7a_crpo_guided_ppo.pdf}
+\label{fig7a:crpo_guided_ppo}
+}
+\hfil
+\subfloat[Lagrangian-PPO.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig7b_lagrangian_ppo.pdf}
+\label{fig7b:lagrangian_ppo}
+}
+\hfil
+\subfloat[PPO-penalty.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig7c_ppo_penalty.pdf}
+\label{fig7c:ppo_penalty}
+}
+\hfil
+\subfloat[Random allocation.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig7d_random_allocation.pdf}
+\label{fig7d:random_allocation}
+}
+\hfil
+\subfloat[Depth-priority allocation.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig7e_depth_priority_allocation.pdf}
+\label{fig7e:depth_priority_allocation}
+}
+\hfil
+\subfloat[Reference.]{
+\includegraphics[width=0.31\textwidth]{Figures/Fig7f_reference.pdf}
+\label{fig7f:reference}
+}
+\caption{Qualitative reconstruction comparison under the same test viewpoint.}
+\label{fig7:qualitative_3d_mapping}
+\end{figure*}
+
+\subsection{Per-Slot Enumeration Bounds and Architecture Ablation}
+\label{sec:oracle_ablation}
+
+This subsection answers two structural questions about the proposed system. First, how much of the resource allocation problem can be solved by slot-wise optimization alone, given that the per-slot action space contains only $28$ discrete allocations? Second, does the modality-separated hybrid digital-analog architecture itself matter, or would a conventional all-digital design perform comparably under the same resource optimization? Table~\ref{tab:oracle_ablation} reports the surrogate-level test results under the same evaluation protocol as Table~\ref{tab:eiffel_resource_allocation_behavior}.
+
+\begin{table}[t]
+\centering
+\caption{Per-Slot Enumeration Bounds and All-Digital Architecture Ablation on the Eiffel Test Set. Oracle and Rule-Based Rows Are Averaged over Five Channel Seeds; the CRPO-Guided PPO Row Is Additionally Averaged over Five Training Seeds. Feasibility Requires $J_{C_R}\le0.05$ and $J_{C_D}\le0.05$.}
+\label{tab:oracle_ablation}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.08}
+\begin{tabular}{l c c c c}
+\hline
+Method & $\bar{Q}_{\mathrm{rec}}$ $\uparrow$ & $J_{C_R}$ $\downarrow$ & $J_{C_D}$ $\downarrow$ & Feasible \\
+\hline
+\multicolumn{5}{l}{\textit{Hybrid digital-analog architecture (proposed)}} \\
+Greedy oracle (per-slot) & $0.9765$ & $0.0329$ & $0.0739$ & No \\
+Per-slot Lagrangian oracle & $0.9757$ & $0.0415$ & $0.0248$ & Yes \\
+CRPO-guided PPO & $0.9304$ & $0.0329$ & $0.0432$ & Yes \\
+\hline
+\multicolumn{5}{l}{\textit{All-digital RGB variant (ablation)}} \\
+Fixed-balanced allocation & $0.1435$ & $0.6146$ & $0.1015$ & No \\
+Greedy oracle (per-slot) & $0.2532$ & $0.5570$ & $0.1271$ & No \\
+Per-slot Lagrangian oracle & $0.2532$ & $0.5570$ & $0.0229$ & No \\
+\hline
+\end{tabular}
+\end{table}
+
+The upper half of Table~\ref{tab:oracle_ablation} isolates the value of sequence-level decision-making. The greedy oracle enumerates all $28$ actions at every slot with privileged information: it observes the instantaneous link gain including the realized shadow fading and the exact received-quality outcome of every candidate action before committing. It attains the highest surrogate reward, but its average depth violation $J_{C_D}=0.0739$ exceeds the tolerance of $0.05$. This confirms that the long-term constraints genuinely couple the slots: satisfying a sequence-average usability requirement is not implied by per-slot optimality, because the violation budget must be balanced across slots with heterogeneous channel states. The per-slot Lagrangian oracle becomes feasible after its multipliers are tuned by grid search on the training trajectories ($16$ candidate pairs; the selected pair is $(\lambda_R,\lambda_D)=(0.5,2.0)$), and its reward can be regarded as a practical upper bound for this problem instance. CRPO-guided PPO reaches $95.4\%$ of this bound while satisfying both constraints, using only the causal five-dimensional state, a single forward pass per slot, and no scene-specific multiplier tuning. We therefore position the learned policy not as outperforming exhaustive per-slot search, but as approaching an oracle bound that is itself not deployable: a real transmitter cannot observe the outcome of all candidate allocations before transmitting, and the oracle multipliers must be re-tuned offline for every scene and constraint setting.
+
+The lower half of Table~\ref{tab:oracle_ablation} validates the architecture choice. In the all-digital variant, the RGB stream is transmitted by conventional separate source-channel coding over the same physical-layer abstraction as the depth stream: the frame is compressed by the better of JPEG and WebP at each rate point, the MCS is selected by the same SNR thresholds, and the frame is delivered error-free whenever the compressed payload fits the slot bit budget. Under the considered bandwidth regime, the RGB stream receives at most $14$ subcarriers, which corresponds to roughly $0.075$ channel uses per pixel, and even the lowest-rate configuration of the source codecs (about $250$~kbit per frame) exceeds the per-slot RGB bit budget unless the per-subcarrier SNR is high; across the evaluation grid, $91.8\%$ of the frame-allocation conditions deliver no RGB frame at all, exhibiting the classical cliff effect. As a result, even the per-slot oracles cannot rescue this architecture: the best achievable surrogate reward drops from $0.9765$ to $0.2532$, and the RGB constraint cost $J_{C_R}=0.5570$ exceeds the tolerance by an order of magnitude with a $79.6\%$ per-slot violation rate. The comparison shows that the graceful degradation of the analog JSCC link is not a stylistic preference but a prerequisite for meeting the appearance-quality constraint in this regime, which supports the modality-separated hybrid design adopted in this paper. An all-analog variant that also maps depth through a learned JSCC codec is not evaluated here, because lossy analog reconstruction of depth would feed corrupted geometry directly into TSDF fusion, and the digital link already delivers depth tiles losslessly at moderate cost; we leave a learned joint RGB-D codec as future work.
+
+\subsection{Resource Allocation Behavior Analysis}
+
+\begin{table*}[t]
+\centering
+\caption{Resource Allocation Behavior on the Eiffel Test Set}
+\label{tab:eiffel_resource_allocation_behavior}
+\setlength{\tabcolsep}{6pt}
+\renewcommand{\arraystretch}{1.05}
+\begin{tabular}{l c c c c c c}
+\hline
+Method 
+& Avg. $k_D$ 
+& Avg. \(\beta_D\)
+& Avg. $Q_{\mathrm{rgb}}$
+& Avg. $R_{\mathrm{dep}}$
+& $J_{C_R}$
+& $J_{C_D}$ \\
+\hline
+Fixed-balanced allocation & $12.0000\pm0.0000$ & $0.4000\pm0.0000$ & $0.7994\pm0.0284$ & $0.3298\pm0.0464$ & $0.0021\pm0.0020$ & $0.1015\pm0.0137$ \\
+RGB-priority allocation & $10.0000\pm0.0000$ & $0.2000\pm0.0000$ & $0.8888\pm0.0273$ & $0.2117\pm0.0377$ & $0.0001\pm0.0000$ & $0.1733\pm0.0170$ \\
+Depth-priority allocation & $22.0000\pm0.0000$ & $0.8000\pm0.0000$ & $0.2580\pm0.0278$ & $0.5809\pm0.0481$ & $0.4420\pm0.0278$ & $0.0291\pm0.0049$ \\
+Random allocation & $16.0284\pm0.0655$ & $0.5035\pm0.0032$ & $0.5670\pm0.0146$ & $0.3948\pm0.0458$ & $0.1761\pm0.0105$ & $0.0860\pm0.0104$ \\
+PPO-penalty & $13.1241\pm0.7436$ & $0.7954\pm0.0058$ & $0.7322\pm0.0422$ & $0.4697\pm0.0514$ & $0.0210\pm0.0123$ & $0.0457\pm0.0087$ \\
+Lagrangian-PPO & $14.9575\pm1.0798$ & $0.7925\pm0.0124$ & $0.6355\pm0.0664$ & $0.4974\pm0.0501$ & $0.0907\pm0.0476$ & $0.0397\pm0.0075$ \\
+CRPO-guided PPO & $13.6010\pm0.3805$ & $0.7926\pm0.0081$ & $0.7104\pm0.0339$ & $0.4780\pm0.0494$ & $0.0329\pm0.0171$ & $0.0432\pm0.0077$ \\
+\hline
+\end{tabular}
+\end{table*}
+
+This subsection further analyzes the resource allocation behavior of different methods during testing to explain their performance differences in the RGB-D reconstruction task. Table~\ref{tab:eiffel_resource_allocation_behavior} reports the average depth subcarrier allocation $k_D$, depth power ratio $\beta_D$, RGB reception quality $Q_{\mathrm{rgb}}$, depth transmission completeness $R_{\mathrm{dep}}$, and the average RGB and depth constraint violation costs $J_{C_R}$ and $J_{C_D}$ on the Eiffel test set. All entries are reported as mean $\pm$ standard deviation over the evaluated training, channel, and action seeds. A lower constraint cost indicates better satisfaction of the corresponding long-term task constraint.
+
+The fixed rule-based methods show that one-sided resource preference leads to clear modality imbalance. RGB-priority allocation assigns fewer subcarriers and less power to depth, with $k_D=10.0000\pm0.0000$ and $\beta_D=0.2000\pm0.0000$. It therefore achieves the highest RGB reception quality of $Q_{\mathrm{rgb}}=0.8888\pm0.0273$ and an RGB constraint cost close to zero. However, its depth transmission completeness is only $R_{\mathrm{dep}}=0.2117\pm0.0377$, and the corresponding depth constraint cost reaches $0.1733\pm0.0170$. This indicates that excessive preference for RGB significantly weakens the availability of geometric observations. In contrast, depth-priority allocation assigns the most resources to depth, with $k_D=22.0000\pm0.0000$ and $\beta_D=0.8000\pm0.0000$, increasing $R_{\mathrm{dep}}$ to $0.5809\pm0.0481$. However, its $Q_{\mathrm{rgb}}$ decreases to $0.2580\pm0.0278$, and its RGB constraint cost reaches $0.4420\pm0.0278$. This shows that simply prioritizing depth can improve geometric data transmission but severely damages RGB appearance information.
+
+Fixed-balanced allocation performs well on the RGB side, achieving $Q_{\mathrm{rgb}}=0.7994\pm0.0284$ and a low $J_{C_R}=0.0021\pm0.0020$. However, its $R_{\mathrm{dep}}$ is $0.3298\pm0.0464$, and its depth constraint cost remains $0.1015\pm0.0137$. This indicates that a fixed balanced strategy avoids extreme resource bias, but it remains difficult to satisfy both RGB and depth constraints because the allocation cannot adapt to communication states and task requirements. Random allocation has an average resource allocation near the middle of the candidate action space, but it obtains $Q_{\mathrm{rgb}}=0.5670\pm0.0146$ and $J_{C_R}=0.1761\pm0.0105$, showing strong instability. This result indicates that random actions cannot form an effective tradeoff for RGB-D transmission.
+
+In contrast, learning-based methods obtain more balanced resource allocation results. PPO-penalty, Lagrangian-PPO, and CRPO-guided PPO all tend to select a high depth power ratio close to $\beta_D=0.8$, while keeping the average number of depth subcarriers well below the extreme value of $k_D=22.0000$ adopted by depth-priority allocation. This indicates that learning-based policies do not simply maximize depth resources, but preserve RGB transmission resources while maintaining sufficient depth availability.
+
+Among the three learning-based methods, CRPO-guided PPO achieves $Q_{\mathrm{rgb}}=0.7104\pm0.0339$ and $R_{\mathrm{dep}}=0.4780\pm0.0494$, with RGB and depth constraint costs of $0.0329\pm0.0171$ and $0.0432\pm0.0077$, respectively. Compared with Lagrangian-PPO, CRPO-guided PPO achieves higher RGB reception quality and a much lower RGB constraint cost, while maintaining comparable depth availability. PPO-penalty obtains the lowest RGB constraint cost among the three learning-based methods, but this result depends on the selected penalty weight and is accompanied by lower depth availability than CRPO-guided PPO. This result shows that CRPO-guided PPO provides a stable constrained tradeoff without relying on manual penalty-weight tuning.
+
+Overall, Table~\ref{tab:eiffel_resource_allocation_behavior} shows that fixed rule-based methods usually optimize only one side of RGB or depth and have difficulty satisfying both task constraints simultaneously. Through the constraint-driven policy update mechanism, CRPO-guided PPO learns a more reasonable resource allocation behavior during testing. It does not sacrifice depth as in RGB-priority allocation and does not severely damage RGB as in depth-priority allocation. Instead, it achieves a more stable tradeoff among $k_D$, $\beta_D$, $Q_{\mathrm{rgb}}$, and $R_{\mathrm{dep}}$. These results validate the effective constraint-balancing capability of the proposed method in reconstruction-aware RGB-D transmission.
+
+\subsection{Discussion and Limitations}
+\label{sec:limitations}
+
+Finally, we make the scope and the simplifications of this study explicit.
+
+\textbf{Open-loop sensing-communication coupling.} The scanning trajectory is generated by the active mapping planner and treated as an external input that does not react to transmission outcomes. This decoupling is consistent with the considered deployment: the planner runs onboard the UAV and consumes the locally captured, lossless observations, so its trajectory decisions are independent of the A2G link quality, and transmission degradation affects only the remote copy of the map maintained at the ERV. If, instead, the planner were driven by the ERV-side reconstructed map, lossy transmission would perturb the planned viewpoints, and the sensing and communication decisions would have to be optimized jointly; this closed-loop setting is left for future work.
+
+\textbf{Single-scene calibration.} The surrogate parameters, the PSNR normalization bounds, and the constraint thresholds are calibrated on the Eiffel scene, and the fitted values, including the zero joint weight $w_j$, are explicitly scene-specific. The held-out evaluation covers unseen trajectories of the same scene, not unseen scenes. What is intended to transfer is the methodology, namely the offline calibration pipeline, the reconstruction-aware constrained formulation, and the constraint-switching learning scheme, whereas the numerical surrogate must be re-fitted for a new scene from a modest number of offline reconstruction runs (54 fitting conditions in this study). Validating the full pipeline across structurally different scenes is an important next step.
+
+\textbf{Channel and protocol abstractions.} The shadow-fading process is drawn independently across slots, ignoring spatial correlation along the flight path; the digital links are modeled by an idealized MCS bit-budget abstraction with error-free delivery within the budget and no retransmission; and pose information is assumed to be conveyed without loss. These abstractions isolate the resource allocation problem, but hardware-in-the-loop validation with a real protocol stack remains future work.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+This paper studies UAV-assisted remote RGB-D 3D reconstruction communication in post-disaster emergency scenarios. To address the constrained air-to-ground link, the high transmission load of multimodal observations, and the distinct roles of RGB and depth in 3D reconstruction, this paper proposes a modality-separated hybrid digital-analog semantic transmission architecture. In this architecture, RGB images are transmitted through an analog semantic JSCC link to improve the robust recovery of appearance information under time-varying channels, while depth maps are transmitted through a digital auxiliary link to ensure the availability of geometric observations. Based on this architecture, this paper establishes a joint subcarrier and power allocation model for the air-to-ground link and uses a saturation-based surrogate function to characterize the nonlinear relationship among RGB reception quality, the depth transmission success ratio, and the final reconstruction quality. The resource coordination problem is further formulated as a CMDP, which maximizes the sequence-average reconstruction quality while constraining the long-term violation degrees of RGB appearance quality and depth geometric usability.
+
+To solve this problem, this paper tailors a CRPO-guided PPO method. The method optimizes the reconstruction quality when the constraints are satisfied and switches to constraint correction when any constraint is violated, thereby preventing the policy from persistently sacrificing the basic usability of either modality when improving the average reconstruction return. The experiments support four findings. First, the architecture matters: an all-digital RGB variant based on separate source-channel coding fails the appearance-quality constraint in the considered bandwidth regime even under per-slot optimal allocation, which validates transmitting RGB through the analog learned-JSCC link. Second, the long-term constraints genuinely couple the slots: an unconstrained per-slot greedy oracle with privileged information violates the depth constraint, whereas CRPO-guided PPO satisfies both constraints and reaches over $95\%$ of the reward of an offline-tuned per-slot Lagrangian oracle using only causal state information and no scene-specific tuning. Third, among deployable methods, fixed-rule allocation cannot satisfy both task constraints, and Lagrangian-PPO violates the RGB constraint on the test set, which propagates to a trajectory-consistent rendering-quality loss in the final reconstruction; CRPO-guided PPO avoids both failure modes. Fourth, in the operating regime of the learned policies, final reconstruction quality is dominated by RGB appearance, while the depth constraint acts as a usability floor that prevents geometric collapse under depth starvation. These results demonstrate that explicitly incorporating 3D reconstruction task quality into semantic communication resource allocation improves the task performance of remote 3D mapping systems over constrained air-to-ground links.
+
+Future work will further investigate the joint optimization of sensing, communication, and reconstruction. UAV trajectory planning and communication resource allocation can be modeled in a unified framework to support the coordinated optimization of sensing and transmission decisions. The proposed framework can also be extended to multi-UAV cooperative reconstruction, where distributed semantic transmission and multi-agent constrained reinforcement learning can be studied under multi-link interference, cooperative sensing, and limited edge computing resources. In addition, validating the surrogate calibration pipeline across structurally different scenes, and validating the proposed method with real disaster data and hardware link tests under complex occlusions, imperfect synchronization, and practical wireless protocol stacks, remain important directions for future research.
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs.bib}
+
+%{\appendices
+%\section*{Proof of the First Zonklar Equation}
+%Appendix one text goes here.
+% You can choose not to have a title for an appendix if you want by leaving the argument blank
+%\section*{Proof of the Second Zonklar Equation}
+%Appendix two text goes here.}
+
+
+
+
+%\begin{IEEEbiography}[{\includegraphics[width=1in,height=1.25in,clip,keepaspectratio]{Profiles/JihuanJin.jpg}}]{Jihuan Jin}
+%received the B.S. degree from Hubei University of Education, Wuhan, Hubei, China, in 2019, and the M.S. degree from South-Central Minzu University, Wuhan, Hubei, China, in 2023. He is currently pursuing the Ph.D. degree with the Muroran Institute of Technology, Muroran, Japan. His research interests include semantic communications, UAV-assisted wireless networks, multi-agent reinforcement learning.
+%\end{IEEEbiography}
+
+%\begin{IEEEbiography}[{\includegraphics[width=1in,height=1.25in,clip,keepaspectratio]{Profiles/MianxiongDong.jpg}}]{Mianxiong Dong}
+%received B.S., M.S. and Ph.D. in Computer Science and Engineering from The University of Aizu, Japan. He is the Vice President and Professor of Muroran Institute of Technology, Japan. He was a JSPS Research Fellow with School of Computer Science and Engineering, The University of Aizu, Japan and was a visiting scholar with BBCR group at the University of Waterloo, Canada supported by JSPS Excellent Young Researcher Overseas Visit Program from April 2010 to August 2011. Dr. Dong was selected as a Foreigner Research Fellow (a total of 3 recipients all over Japan) by NEC C\&C Foundation in 2011. He is the recipient of The 12th IEEE ComSoc Asia-Pacific Young Researcher Award 2017, Funai Research Award 2018, NISTEP Researcher 2018 (one of only 11 people in Japan) in recognition of significant contributions in science and technology, The Young Scientists’ Award from MEXT in 2021, SUEMATSU-Yasuharu Award from IEICE in 2021, IEEE TCSC Middle Career Award in 2021. He is Clarivate Analytics 2019, 2021, 2022, 2023, 2025 Highly Cited Researcher (Web of Science) and Foreign Fellow of EAJ.
+%\end{IEEEbiography}
+
+%\begin{IEEEbiography}[{\includegraphics[width=1in,height=1.25in,clip,keepaspectratio]{Profiles/KaoruOta.jpg}}]{Kaoru Ota}
+%was born in Aizu-Wakamatsu, Japan. She received her B.S. and Ph.D. degrees from the University of Aizu, Japan, in 2006 and 2012, respectively, and her M.S. degree from Oklahoma State University, USA, in 2008. She is a Distinguished Professor at the Graduate School of Information Sciences, Tohoku University, Japan, and a Professor at the Center for Computer Science (CCS), Muroran Institute of Technology, Japan, where she served as the founding director. She was also a Ministry of Education, Culture, Sports, Science and Technology (MEXT) Excellent Young Researcher. From March 2010 to March 2011, she was a visiting scholar at the University of Waterloo, Canada. Also, she was a Japan Society for the Promotion of Science (JSPS) research fellow at Tohoku University, Japan from April 2012 to April 2013. She is the recipient of IEEE TCSC Early Career Award 2017, The 13th IEEE ComSoc Asia-Pacific Young Researcher Award 2018, 2020 N2Women: Rising Stars in Computer Networking and Communications, 2020 KDDI Foundation Encouragement Award, and 2021 IEEE Sapporo Young Professionals Best Researcher Award, The Young Scientists’ Award from MEXT in 2023. She is Clarivate Analytics 2019, 2021, 2022 Highly Cited Researcher (Web of Science) and is selected as JST-PRESTO researcher in 2021, Fellow of EAJ in 2022, and Fellow of AAIA in 2025.
+%\end{IEEEbiography}
+
+%\begin{IEEEbiography}[{\includegraphics[width=1in,height=1.25in,clip,keepaspectratio]{Profiles/EkramHossain.jpg}}]{Ekram Hossain}(Fellow, IEEE)
+%is a Professor
+%and the Associate Head (Graduate Studies) of the
+%Department of Electrical and Computer Engineering,
+%University of Manitoba, Canada. He is a member (Class of 2016) of the College of the Royal
+%Society of Canada. He is also a fellow of Canadian Academy of Engineering and the Engineering
+%Institute of Canada. He has won several research
+%awards, including the 2017 IEEE Communications
+%Society Best Survey Paper Award and the 2011 IEEE
+%Communications Society Fred Ellersick Prize Paper
+%Award. He was listed as a Clarivate Analytics Highly Cited Researcher in
+%computer science from 2017 to 2025. Previously, he served as the Editor-in-Chief (EiC) for IEEE Press (2018–2021) and IEEE COMMUNICATIONS
+%SURVEYS AND TUTORIALS (2012–2016). He served as the Director of
+%Magazines (2020–2021) and the Director of Online Content (2022–2023) for
+%the IEEE Communications Society. He was a Distinguished Lecturer of the
+%IEEE Communications Society and the IEEE Vehicular Technology Society.
+%\end{IEEEbiography}
+
+\end{document}
