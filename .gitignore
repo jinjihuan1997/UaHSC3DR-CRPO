@@ -72,3 +72,7 @@ GSFusion/third_party/open3d/
 # System files
 .DS_Store
 Thumbs.db
+.nfs*
+*~
+*.tmp
+*.swp
