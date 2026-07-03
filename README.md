@@ -26,7 +26,6 @@ Representative scripts:
 - `scripts/run_eiffel_penalty_multiseed_sweep.sh`: PPO-penalty weight sensitivity.
 - `scripts/run_oracle_baseline_sweep.sh`: per-slot oracle and architecture ablation.
 - `scripts/run_eiffel_mapping_quality_comparison.sh`: exports policy-selected sequences for GSFusion evaluation.
-- `tools/generate_paper_results.py`: result discovery and paper figure/table generation.
 
 GSFusion backend:
 
@@ -56,4 +55,3 @@ The following are excluded by design:
 - Paper build outputs, generated figures, logs, and temporary caches.
 
 This keeps the GitHub repository suitable for code review and method reproduction while requiring users to download datasets and regenerate experiment outputs locally.
-

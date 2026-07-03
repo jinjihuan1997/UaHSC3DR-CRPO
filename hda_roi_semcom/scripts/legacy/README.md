@@ -9,5 +9,3 @@ Current experiment entrypoints:
 
 - `scripts/run_eiffel_crpo_compare.sh`
 - `scripts/run_fushimi_crpo_compare.sh`
-- `tools/generate_paper_results.py`
-

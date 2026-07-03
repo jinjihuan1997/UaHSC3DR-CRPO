@@ -10,12 +10,11 @@ Included:
 
 - `src/`: channel model, dataset loader, semantic codec, CRPO/PPO resource-allocation environment, and utility modules.
 - `scripts/`: experiment orchestration, surrogate fitting, GSFusion export, evaluation, and sanity-check scripts.
-- `tools/`: paper result discovery, plotting, table generation, and summarization utilities.
-- `configs/`, `docs/`, `README.md`, `requirements.txt`, root run scripts, and paper LaTeX source files.
+- `configs/`, `docs/`, `README.md`, `requirements.txt`, and root run scripts.
 
 Excluded:
 
-- `outputs/`, `paper_results/`, `Figures/`, `checkpoints/`, generated PDFs, build logs, temporary JSON/cache files, and Python caches.
+- `outputs/`, `paper_results/`, `Figures/`, `checkpoints/`, paper LaTeX/BibTeX sources, generated PDFs, build logs, temporary JSON/cache files, Python caches, and paper figure/table generation utilities.
 
 ### `GSFusion/`
 
@@ -48,4 +47,3 @@ git status --short
 ```
 
 No file larger than 50 MB should be committed. Datasets, weights, generated outputs, and binary dependencies should remain external.
-
