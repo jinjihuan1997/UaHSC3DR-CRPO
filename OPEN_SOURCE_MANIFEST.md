@@ -4,7 +4,7 @@ This manifest records what was kept in the lightweight GitHub-ready bundle and w
 
 ## Included
 
-### `hda_roi_semcom/`
+### `hda_semcom/`
 
 Included:
 

@@ -4,7 +4,7 @@ Lightweight research-code release for the paper project on UAV-assisted hybrid s
 
 This repository is organized as a lightweight bundle of three local projects:
 
-- `hda_roi_semcom/`: reconstruction-aware RGB-D transmission, surrogate fitting, CMDP resource allocation, CRPO/PPO training, evaluation, and paper-result generation scripts.
+- `hda_semcom/`: reconstruction-aware RGB-D transmission, surrogate fitting, CMDP resource allocation, CRPO/PPO training, and evaluation scripts.
 - `GSFusion/`: GSFusion-style RGB-D reconstruction backend source used for final reconstruction-quality evaluation.
 - `MAGICIAN/`: active mapping / trajectory-generation utilities and export scripts used to prepare RGB-D observation trajectories.
 
@@ -15,7 +15,7 @@ The release intentionally excludes large generated artifacts, datasets, checkpoi
 Main resource-allocation project:
 
 ```bash
-cd hda_roi_semcom
+cd hda_semcom
 pip install -r requirements.txt
 ```
 

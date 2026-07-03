@@ -41,11 +41,11 @@ env/
 /logs/
 /wandb/
 /tensorboard/
-/hda_roi_semcom/datasets/
-/hda_roi_semcom/checkpoints/
-/hda_roi_semcom/outputs/
-/hda_roi_semcom/paper_results/
-/hda_roi_semcom/Figures/
+/hda_semcom/datasets/
+/hda_semcom/checkpoints/
+/hda_semcom/outputs/
+/hda_semcom/paper_results/
+/hda_semcom/Figures/
 /MAGICIAN/data/
 /MAGICIAN/weights/
 /MAGICIAN/results/
@@ -64,8 +64,8 @@ GSFusion/third_party/open3d/
 *.out
 *.toc
 *.synctex.gz
-/hda_roi_semcom/*.pdf
-/hda_roi_semcom/*.docx
+/hda_semcom/*.pdf
+/hda_semcom/*.docx
 /MAGICIAN/*.pdf
 /MAGICIAN/*.docx
 

@@ -5,13 +5,13 @@ This lightweight release does not include large local artifacts. The original wo
 ## Excluded Data
 
 - `MAGICIAN/data/`: Macarons++ scene data, including Eiffel/Fushimi scene assets and high-resolution trajectory memories.
-- `hda_roi_semcom/outputs/`: degraded RGB-D sequences, GSFusion run outputs, cached geometry samples, logs, and intermediate CSV files.
-- `hda_roi_semcom/paper_results/` and `hda_roi_semcom/Figures/`: generated paper figures and tables.
+- `hda_semcom/outputs/`: degraded RGB-D sequences, GSFusion run outputs, cached geometry samples, logs, and intermediate CSV files.
+- `hda_semcom/paper_results/` and `hda_semcom/Figures/`: generated paper figures and tables.
 
 ## Excluded Weights and Checkpoints
 
 - `MAGICIAN/weights/`: pretrained MAGICIAN/Macarons/SCONE/ResNet weights.
-- `hda_roi_semcom/checkpoints/`: CRPO/PPO/PPO-penalty trained policy checkpoints.
+- `hda_semcom/checkpoints/`: CRPO/PPO/PPO-penalty trained policy checkpoints.
 - GSFusion generated reconstruction states and mesh outputs.
 
 ## Excluded Third-Party Binaries
@@ -30,8 +30,8 @@ For a full local reproduction, place or generate data outside the Git repository
 datasets/
 MAGICIAN/data/
 MAGICIAN/weights/
-hda_roi_semcom/outputs/
-hda_roi_semcom/checkpoints/
+hda_semcom/outputs/
+hda_semcom/checkpoints/
 ```
 
 Keep these paths ignored by Git.
